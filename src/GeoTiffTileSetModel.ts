@@ -25,7 +25,8 @@ import {
   normalizeRawTypedArray
 } from "./utils";
 import {PixelMeaningEnum} from "./interfaces";
-import {convert16To8BitRGB, convert32FloatTo8BitRGB, convert8To8BitRGB } from "./bitstorgb";
+import {convert16To8BitRGB, convert32FloatTo8BitRGB, convert8To8BitRGB, downscale16to8bits} from "./bitstorgb";
+import {GrayScaleTransformation} from "./gradients";
 
 const pool = new Pool();
 
@@ -229,8 +230,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         : tileHeight * tileY;
 
     const window = [tileOffsetX, tileOffsetY, tileOffsetX + tileWidth, tileOffsetY + tileHeight];
-    const nodata = this._nodata ?? image.getGDALNoData();
-    const hasBands = Array.isArray(this._bands) && this._bands.length > 0;
+    const nodata = typeof this._nodata !== "undefined" ? this._nodata : image.getGDALNoData();
 
     if (this._bandsNumber === 1) {
       const bands = [0];
@@ -250,30 +250,30 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
 
         let pixelFormat = pixelFormatBandUndefined;
         let data: Uint8Array;
+        const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
         if (this._pixelFormatMeaning === PixelMeaningEnum.Grayscale8) {
-          data = convert8To8BitRGB(raw as Uint8Array, bands.length, this._transformation); //  Takes care of bit conversion and 1 band to 3 bands conversion.
+          data = convert8To8BitRGB(raw as Uint8Array, {samplesPerPixel: bands.length, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
         } else
         if (image.getBitsPerSample() == 32) {
-          data = convert32FloatTo8BitRGB(raw as Float32Array, bands.length, nodata, this._transformation); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+          data = convert32FloatTo8BitRGB(raw as Float32Array, bands.length, nodata, transformation); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         } else {
           if (image.getBitsPerSample() == 16) {
-            data = convert16To8BitRGB(raw as Uint16Array, bands.length, this._transformation); //  Takes care of bit conversion and 1 band to 3 bands conversion.
+            data = convert16To8BitRGB(raw as Uint16Array, {samplesPerPixel: bands.length, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
           } else {
-            data = convert8To8BitRGB(raw as Uint8Array, bands.length, this._transformation); // Takes care of the 1 band to 3 bands conversion.
+            data = convert8To8BitRGB(raw as Uint8Array, {samplesPerPixel: bands.length, transformation, nodata}); // Takes care of the 1 band to 3 bands conversion.
           }
-          if ((bands.length === 1 || bands.length === 3) && isNumber(nodata)) {
-            data = convertRGBToRGBA(data);
+          if (isNumber(nodata)) {
+            pixelFormat =  PixelFormat.RGBA_8888
+          } else {
+            pixelFormat =  PixelFormat.RGB_888
           }
-          // if (isNumber(nodata)) {
-          //   stripPixelsNoData(data, nodata, null);
-          // }
         }
 
-        const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
-            tileOffsetX, tileOffsetY, tileWidth, tileHeight,
-            imageWidth, imageHeight, flipY);
-        data = stripResult.data;
-        pixelFormat = stripResult.pixelFormat;
+        // const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
+        //     tileOffsetX, tileOffsetY, tileWidth, tileHeight,
+        //     imageWidth, imageHeight, flipY);
+        // data = stripResult.data;
+        // pixelFormat = stripResult.pixelFormat;
 
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       }).catch(error => {
@@ -323,7 +323,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         const raw = raws[0];
         const rawMask = raws[1];
         let pixelFormat = pixelFormat_;
-        let data = (image.getBitsPerSample() == 16) ? convert16To8BitRGB(raw as Uint16Array) : raw as Uint8Array;
+        let data = (image.getBitsPerSample() == 16) ? downscale16to8bits(raw as Uint16Array) : raw as Uint8Array;
 
         const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
             tileOffsetX, tileOffsetY, tileWidth, tileHeight,
@@ -496,10 +496,13 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     for (let level = imageCount - 1; level >= 0; level--) {
       let image = await geoTiffFile.getImage(level);
       const newSubfileType = image.getFileDirectory().NewSubfileType;
-      const maskImage = isDefined(newSubfileType) && (newSubfileType & (1 << 2)) !== 0; // Bit 2 indicates mask.
-      if (image.getTileWidth() === image.getWidth()) {
+    //  const maskImage = isDefined(newSubfileType) && (newSubfileType & (1 << 2)) !== 0; // Bit 2 indicates mask.
+      const isMask = (newSubfileType & 0b100) !== 0;
+
+      if (image.getTileWidth() === image.getWidth() && image.getTileHeight() === image.getHeight()) {
         image = new RetiledGeoTIFFImage(image);
       }
+
       const tileWidth = image.getTileWidth();
       const tileHeight = image.getTileHeight();
       const tileColumnCount = Math.ceil(image.getWidth() / tileWidth);
@@ -510,7 +513,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       if (boundsEqual(boundsLevel, bounds, 1e-6)) {
         boundsLevel = bounds;
       }
-      if (maskImage) {
+      if (isMask) {
         maskImages.push(image);
       } else {
         tileMatrix.push({bounds: boundsLevel, tileWidth, tileHeight, tileColumnCount, tileRowCount});

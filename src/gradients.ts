@@ -67,24 +67,6 @@ export const GrayscaleGradient = createGradientColorMap([
     { "level": 1, "color": "#FFFFFF" }   // White
 ]);
 
-export const AdjustedGrayscaleGradientLight = createGradientColorMap([
-    { "level": 0, "color": "#333333" },   // Dark Gray instead of Black
-    { "level": 0.0667, "color": "#444444" },
-    { "level": 0.1333, "color": "#555555" },
-    { "level": 0.2, "color": "#666666" },
-    { "level": 0.2667, "color": "#777777" },
-    { "level": 0.3333, "color": "#888888" },
-    { "level": 0.4, "color": "#999999" },
-    { "level": 0.4667, "color": "#AAAAAA" },
-    { "level": 0.5333, "color": "#BBBBBB" },
-    { "level": 0.6, "color": "#CCCCCC" },
-    { "level": 0.6667, "color": "#DDDDDD" },
-    { "level": 0.7333, "color": "#EEEEEE" },
-    { "level": 0.8, "color": "#FFFFFF" }, // White
-    { "level": 0.8667, "color": "#FFFFFF" },
-    { "level": 0.9333, "color": "#FFFFFF" },
-    { "level": 1, "color": "#FFFFFF" }
-]);
 
 export function RainbowTransformation (x: number): [number, number, number] {
     const colorString = Rainbow.retrieveColor(x);
@@ -94,7 +76,7 @@ export function RainbowTransformation (x: number): [number, number, number] {
 }
 
 export function GrayScaleTransformation (x: number): [number, number, number] {
-    const colorString = AdjustedGrayscaleGradientLight.retrieveColor(x);
+    const colorString = GrayscaleGradient.retrieveColor(x);
     const colorsAsString = colorString.replace(/[^\d,.]/g, '').split(',');
     const rgba = colorsAsString.map(x => Number(x));
     return [rgba[0], rgba[1], rgba[2]];

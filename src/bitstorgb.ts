@@ -1,42 +1,65 @@
 import {GrayScaleTransformation} from "./gradients";
 
 /**
- * Takes care of the bit conversion but also 1 -> 3 bands conversion.
+ * Downscale a Uint16Array (16-bit samples) to Uint8Array (8-bit samples).
+ * @param input - The 16-bit input data (e.g., grayscale or interleaved RGB).
+ * @returns A Uint8Array with 8-bit samples.
  */
-export function convert32To8BitRGB(raw: Uint16Array,
-                                   samplesPerPixel?: number,
-                                   transformation?: (x: number) => [number, number, number]): Uint8Array {
-    return convertTo8BitRGB(raw, (x: number) => x/(255*255*255*255), samplesPerPixel, transformation);
+export function downscale16to8bits(input: Uint16Array): Uint8Array {
+    const output = new Uint8Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+        output[i] = input[i] >> 8; // Convert from 0–65535 to 0–255
+    }
+    return output;
+}
+
+
+interface ConvertTo8BitRGBOptions {
+    convert?: (x:number) => number,
+    samplesPerPixel?: number,
+    transformation?: (x: number) => [number, number, number],
+    nodata?: number
+}
+
+/**
+ * Conversion but also Grayscale32 -> 3 bands conversion.
+ */
+export function convert32To8BitRGB(raw: Uint32Array, options: ConvertTo8BitRGBOptions): Uint8Array {
+    return convertTo8BitRGB(raw,  { ...options, convert:(x: number) => x/(255*255*255*255)});
 }
 
 
 /**
- * Takes care of the bit conversion but also 1 -> 3 bands conversion.
+ * Conversion but also Grayscale16 -> 3 bands conversion.
  */
-export function convert16To8BitRGB(raw: Uint16Array,
-                            samplesPerPixel?: number,
-                            transformation?: (x: number) => [number, number, number]): Uint8Array {
-    return convertTo8BitRGB(raw, (x: number) => x/(255*255), samplesPerPixel, transformation);
+export function convert16To8BitRGB(raw: Uint16Array, options: ConvertTo8BitRGBOptions): Uint8Array {
+    return convertTo8BitRGB(raw,  { ...options, convert:(x: number) => x/(255*255)});
 }
 
 /**
- * Takes care of 1 -> 3 bands conversion.
+ * Conversion but also Grayscale8 -> 3 bands conversion.
  */
-export function convert8To8BitRGB(raw: Uint8Array,
-                           samplesPerPixel?: number,
-                           transformation?: (x: number) => [number, number, number]): Uint8Array {
-    return convertTo8BitRGB(raw, (x: number) => x/255, samplesPerPixel, transformation);
+export function convert8To8BitRGB(raw: Uint8Array, options: ConvertTo8BitRGBOptions): Uint8Array {
+    return convertTo8BitRGB(raw, { ...options, convert:(x: number) => x/255});
 }
 
-export function convertTo8BitRGB(raw: Uint8Array | Uint16Array | Uint32Array, convert: (x:number) => number, samplesPerPixel?: number,
-                          transformation?: (x: number) => [number, number, number]): Uint8Array {
+/**
+ * Conversion but also Grayscale8 -> 3 bands conversion, it will return 4 bands if nodata.
+ */
+export function convertTo8BitRGB( raw: Uint8Array | Uint16Array | Uint32Array, options: ConvertTo8BitRGBOptions): Uint8Array {
     const oldRaw = raw;
-    const newRaw = new Uint8Array(oldRaw.length*3);
+    const bands = typeof options.nodata === "undefined" ?  3 : 4;
+    const newRaw =  new Uint8Array(oldRaw.length * bands);
+    //
     for (let index = 0; index < oldRaw.length; index++) {
-        const normalizedValue = convert(oldRaw[index]); // Standardize Gradient from 0 to 1
-        const rgb = transformation ? transformation(normalizedValue) : GrayScaleTransformation(normalizedValue);
-        for (let j = 0; j < 3; j++) {
-            newRaw[3 * index + j] = rgb[j];
+        const normalizedValue = options.convert(oldRaw[index]); // Standardize Gradient from 0 to 1
+        const rgb = options.transformation ? options.transformation(normalizedValue) : GrayScaleTransformation(normalizedValue);
+        for (let j = 0; j < bands; j++) {
+            if (j<3) {
+                newRaw[bands * index + j] = rgb[j];
+            }  else {
+                newRaw[bands * index + j] =  (oldRaw[index] === options.nodata) ? 0 : 255;
+            }
         }
     }
     return newRaw;
