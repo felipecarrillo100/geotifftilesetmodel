@@ -10,7 +10,7 @@ export function getPixelFormatMeaning(image: GeoTIFFImage): PixelMeaningEnum {
     const samplesPerPixel = image.getSamplesPerPixel();
     const bitsPerSample = image.getBitsPerSample();
     const bytesPerPixel = image.getBytesPerPixel();
-
+    const isRGB = image.getFileDirectory().PhotometricInterpretation === 2;
     // Normalize bitsPerSample to a number
     const bits = Array.isArray(bitsPerSample)
         ? bitsPerSample[0] // assume uniform
@@ -23,12 +23,12 @@ export function getPixelFormatMeaning(image: GeoTIFFImage): PixelMeaningEnum {
         if (bits === 32 && bytesPerPixel === 4) return PixelMeaningEnum.Grayscale32;
     }
 
-    if (samplesPerPixel === 3) {
+    if (samplesPerPixel === 3 && isRGB) {
         if (bits === 8 && bytesPerPixel === 3) return PixelMeaningEnum.RGB;   // 8x3 = 24
         if (bits === 32 && bytesPerPixel === 12) return PixelMeaningEnum.RGB96; // 32x3 =96
     }
 
-    if (samplesPerPixel === 4) {
+    if (samplesPerPixel === 4 && isRGB) {
         if (bits === 8 && bytesPerPixel === 4) return PixelMeaningEnum.RGBA;
     }
 

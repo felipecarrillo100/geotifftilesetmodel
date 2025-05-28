@@ -102,9 +102,7 @@ function stripPixelsByMask(data: Uint8Array, rawMaskResult: ReadRasterResult | n
 function isPalette(image: GeoTIFFImage) {
   return hasPhotometricInterpretation(image, 3);
 }
-function isRGB(image: GeoTIFFImage) {
-  return hasPhotometricInterpretation(image, 2);
-}
+
 
 function hasPhotometricInterpretation(image: GeoTIFFImage, photometricInterpretation: number) {
   return image.getFileDirectory().PhotometricInterpretation === photometricInterpretation;
@@ -232,7 +230,39 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const window = [tileOffsetX, tileOffsetY, tileOffsetX + tileWidth, tileOffsetY + tileHeight];
     const nodata = typeof this._nodata !== "undefined" ? this._nodata : image.getGDALNoData();
 
-    if (this._bandsNumber === 1) {
+    if (this.dataType === RasterDataType.ELEVATION ) {
+      if (this._pixelFormat === PixelFormat.FLOAT_32 || this._pixelFormat === PixelFormat.UINT_32) {
+        const pixelFormat = this._pixelFormat || PixelFormat.FLOAT_32;
+        image.readRasters({ window, pool, signal })
+            .then(rawValues => {
+              const raw = (Array.isArray(rawValues) ? rawValues[0] : rawValues) as TypedArray;
+
+              if (isNumber(nodata)) {
+                for (let i = 0; i < raw.length; i++) {
+                  if (equals(raw[i], nodata)) {
+                    raw[i] = 0;
+                  }
+                }
+              }
+              const floats = new Float32Array(raw); // Handle cast safely
+              onSuccess(tile, {
+                data: floats.buffer,
+                pixelFormat,
+                width: tileWidth,
+                height: tileHeight,
+              });
+            })
+            .catch(error => {
+              console.error("Elevation read error", error);
+              onError(tile, error);
+            });
+      } else {
+        const error = new Error("Error creating Geotiff Model") as any;
+        error.cause = "INVALIDELEVATION";
+        error.pixelFormat = this._pixelFormat; // Add any extra parameter you need
+        throw error;
+      }
+    } else if (this._bandsNumber === 1) {
       const bands = [0];
       const pixelFormatBandUndefined = this._pixelFormat || ((bands.length === 4 || isNumber(nodata)) ? PixelFormat.RGBA_8888 : PixelFormat.RGB_888);
 
@@ -281,40 +311,6 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         onError(tile, error)
       });
 
-    } else if (this.dataType === RasterDataType.ELEVATION ) {
-      if (this._pixelFormat === PixelFormat.FLOAT_32 || this._pixelFormat === PixelFormat.UINT_32) {
-        const pixelFormat = this._pixelFormat || PixelFormat.FLOAT_32;
-
-        image.readRasters({ window, pool, signal })
-            .then(rawValues => {
-              const raw = (Array.isArray(rawValues) ? rawValues[0] : rawValues) as TypedArray;
-
-              if (isNumber(nodata)) {
-                for (let i = 0; i < raw.length; i++) {
-                  if (equals(raw[i], nodata)) {
-                    raw[i] = 0;
-                  }
-                }
-              }
-
-              const floats = new Float32Array(raw); // Handle cast safely
-              onSuccess(tile, {
-                data: floats.buffer,
-                pixelFormat,
-                width: tileWidth,
-                height: tileHeight,
-              });
-            })
-            .catch(error => {
-              console.error("Elevation read error", error);
-              onError(tile, error);
-            });
-      } else {
-        const error = new Error("Error creating Geotiff Model") as any;
-        error.cause = "INVALIDELEVATION";
-        error.pixelFormat = this._pixelFormat; // Add any extra parameter you need
-        throw error;
-      }
     } else {
       const pixelFormat_ = this._pixelFormat;
       const rgbPromise = image.readRGB({window, pool, enableAlpha: pixelFormat_ === PixelFormat.RGBA_8888, signal: signal!});

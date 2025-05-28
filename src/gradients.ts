@@ -1,32 +1,32 @@
-import {createGradientColorMap} from "@luciad/ria/util/ColorMap";
+import {ColorMap, createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
 export const WorldElevationColorMap = createGradientColorMap([
-    {level: -15000, color: "#0e1122"},
-    {level: -1000, color: "#5ba2d8"},
-    {level: -100, color: "#7ebff0"},
-    {level: 0, color: "#bfeafe"},
-    {level: 0.1, color: "#9bd090"},
-    {level: 100, color: "#84bf78"},
-    {level: 200, color: "#9dc67b"},
-    {level: 300, color: "#b7cc82"},
-    {level: 400, color: "#ced796"},
-    {level: 500, color: "#e0e49e"},
-    {level: 600, color: "#efe9a8"},
-    {level: 700, color: "#e8de9f"},
-    {level: 800, color: "#ded38d"},
-    {level: 900, color: "#d3c688"},
-    {level: 1100, color: "#cab46e"},
-    {level: 1300, color: "#c3a158"},
-    {level: 1500, color: "#b99247"},
-    {level: 2000, color: "#aa8042"},
-    {level: 2500, color: "#ac946b"},
-    {level: 3000, color: "#baa787"},
-    {level: 3500, color: "#c9c89c"},
-    {level: 4000, color: "#d8cab1"},
-    {level: 4500, color: "#e6dbc5"},
-    {level: 5000, color: "#f5ecda"},
-    {level: 5500, color: "#faf1df"},
-    {level: 6000, color: "#fafafa"},
+    { level: 0, color: "#0e1122" },
+    { level: 0.6667, color: "#5ba2d8" },
+    { level: 0.7081, color: "#7ebff0" },
+    { level: 0.7143, color: "#bfeafe" },
+    { level: 0.7143, color: "#9bd090" },
+    { level: 0.7190, color: "#84bf78" },
+    { level: 0.7238, color: "#9dc67b" },
+    { level: 0.7286, color: "#b7cc82" },
+    { level: 0.7333, color: "#ced796" },
+    { level: 0.7381, color: "#e0e49e" },
+    { level: 0.7429, color: "#efe9a8" },
+    { level: 0.7476, color: "#e8de9f" },
+    { level: 0.7524, color: "#ded38d" },
+    { level: 0.7571, color: "#d3c688" },
+    { level: 0.7667, color: "#cab46e" },
+    { level: 0.7762, color: "#c3a158" },
+    { level: 0.7857, color: "#b99247" },
+    { level: 0.8095, color: "#aa8042" },
+    { level: 0.8333, color: "#ac946b" },
+    { level: 0.8571, color: "#baa787" },
+    { level: 0.8810, color: "#c9c89c" },
+    { level: 0.9048, color: "#d8cab1" },
+    { level: 0.9286, color: "#e6dbc5" },
+    { level: 0.9524, color: "#f5ecda" },
+    { level: 0.9762, color: "#faf1df" },
+    { level: 1, color: "#fafafa" }
 ]);
 
 export const Rainbow = createGradientColorMap([
@@ -68,16 +68,13 @@ export const GrayscaleGradient = createGradientColorMap([
 ]);
 
 
-export function RainbowTransformation (x: number): [number, number, number] {
-    const colorString = Rainbow.retrieveColor(x);
-    const colorsAsString = colorString.replace(/[^\d,.]/g, '').split(',');
-    const rgba = colorsAsString.map(x => Number(x));
-    return [rgba[0], rgba[1], rgba[2]];
+export function TransformToGradientColorMap(colorMap:ColorMap) {
+    return function(x: number): [number, number, number] {
+        const colorString = colorMap.retrieveColor(x);
+        const colorsAsString = colorString.replace(/[^\d,.]/g, '').split(',');
+        const rgba = colorsAsString.map(value => Number(value));
+        return [rgba[0], rgba[1], rgba[2]];
+    };
 }
 
-export function GrayScaleTransformation (x: number): [number, number, number] {
-    const colorString = GrayscaleGradient.retrieveColor(x);
-    const colorsAsString = colorString.replace(/[^\d,.]/g, '').split(',');
-    const rgba = colorsAsString.map(x => Number(x));
-    return [rgba[0], rgba[1], rgba[2]];
-}
+export const GrayScaleTransformation = TransformToGradientColorMap(GrayscaleGradient);
