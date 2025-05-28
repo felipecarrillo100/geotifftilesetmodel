@@ -207,6 +207,11 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     };
   }
 
+  public setTransformation(transformation:  (x: number) => [number, number, number]) {
+    this._transformation = transformation;
+    this.invalidate();
+  }
+
   getTileData(
       tile: TileCoordinate,
       onSuccess: (tile: TileCoordinate, data: TileData) => void,

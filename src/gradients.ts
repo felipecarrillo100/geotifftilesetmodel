@@ -1,32 +1,16 @@
 import {ColorMap, createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
-export const WorldElevationColorMap = createGradientColorMap([
-    { level: 0, color: "#0e1122" },
-    { level: 0.6667, color: "#5ba2d8" },
-    { level: 0.7081, color: "#7ebff0" },
-    { level: 0.7143, color: "#bfeafe" },
-    { level: 0.7143, color: "#9bd090" },
-    { level: 0.7190, color: "#84bf78" },
-    { level: 0.7238, color: "#9dc67b" },
-    { level: 0.7286, color: "#b7cc82" },
-    { level: 0.7333, color: "#ced796" },
-    { level: 0.7381, color: "#e0e49e" },
-    { level: 0.7429, color: "#efe9a8" },
-    { level: 0.7476, color: "#e8de9f" },
-    { level: 0.7524, color: "#ded38d" },
-    { level: 0.7571, color: "#d3c688" },
-    { level: 0.7667, color: "#cab46e" },
-    { level: 0.7762, color: "#c3a158" },
-    { level: 0.7857, color: "#b99247" },
-    { level: 0.8095, color: "#aa8042" },
-    { level: 0.8333, color: "#ac946b" },
-    { level: 0.8571, color: "#baa787" },
-    { level: 0.8810, color: "#c9c89c" },
-    { level: 0.9048, color: "#d8cab1" },
-    { level: 0.9286, color: "#e6dbc5" },
-    { level: 0.9524, color: "#f5ecda" },
-    { level: 0.9762, color: "#faf1df" },
-    { level: 1, color: "#fafafa" }
+export const WorldElevationColorMap= createGradientColorMap([
+    { level: 0.0, color: "#009999" },// Deep ocean (-400 m)
+    { level: 0.35, color: "#94D4D4" }, // Shallow water (400 m)
+    { level: 0.49, color: "#567C41" }, // Coastal lowlands (1200 m)
+    { level: 0.58, color: "#77A85A" }, // Lowlands (2700 m)
+    { level: 0.65, color: "#f2d671" }, // Highlands (4000 m)
+    { level: 0.75, color: "#ff8000" }, // Mountains (5300 m)
+    { level: 0.85, color: "#a6421c" }, // Very high mountains (6600 m)
+    { level: 0.95, color: "#9f9f9f" }, // Very high mountains (6600 m)
+    { level: 1.0, color: "#ffffff" }   // Extreme elevations (8000 m)
+
 ]);
 
 export const Rainbow = createGradientColorMap([
@@ -68,8 +52,14 @@ export const GrayscaleGradient = createGradientColorMap([
 ]);
 
 
-export function TransformToGradientColorMap(colorMap:ColorMap) {
-    return function(x: number): [number, number, number] {
+export function TransformToGradientColorMap(colorMap:ColorMap, range?: {min: number, max: number}) {
+    const adaptRange = range ?
+        (x: number) => {
+            const normalizedValue = (x - range.min) / (range.max - range.min);
+            return normalizedValue < 0 ? 0 : (normalizedValue>1 ? 0.999 : normalizedValue);
+        } : (x:number)=>x;
+    return function(n: number): [number, number, number] {
+        const x = adaptRange(n);
         const colorString = colorMap.retrieveColor(x);
         const colorsAsString = colorString.replace(/[^\d,.]/g, '').split(',');
         const rgba = colorsAsString.map(value => Number(value));
