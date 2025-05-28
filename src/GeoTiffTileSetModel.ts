@@ -584,23 +584,12 @@ function createPixelBound(image : GeoTIFFImage) {
 }
 
 
-
-//// Remove external dependencies
-
 /**
  * Returns whether the given value is undefined
  */
 function isUndefined(value: any): value is undefined {
   return typeof value === "undefined";
 }
-
-/**
- * Returns whether the given value is defined, or null if specified
- */
-function isDefined(value: any, canBeNull: boolean = false) {
-  return !isUndefined(value) && (canBeNull || value !== null);
-}
-
 
 /**
  * Returns whether the given value is a number

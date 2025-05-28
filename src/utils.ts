@@ -1,4 +1,4 @@
-import {GeoTIFF, GeoTIFFImage, TypedArray} from "geotiff";
+import {GeoTIFF, GeoTIFFImage} from "geotiff";
 import {PixelMeaningEnum} from "./interfaces";
 import {PixelFormat} from "@luciad/ria/model/tileset/PixelFormat.js";
 import {RasterSamplingMode} from "@luciad/ria/model/tileset/RasterSamplingMode";
