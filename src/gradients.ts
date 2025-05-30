@@ -1,14 +1,15 @@
 import {ColorMap, createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
 export const WorldElevationColorMap= createGradientColorMap([
-    { level: 0.0, color: "#009999" },// Deep ocean (-400 m)
-    { level: 0.35, color: "#94D4D4" }, // Shallow water (400 m)
-    { level: 0.49, color: "#567C41" }, // Coastal lowlands (1200 m)
-    { level: 0.58, color: "#77A85A" }, // Lowlands (2700 m)
+    { level: 0.0, color: "#006a6a" },// Deep ocean (-400 m)
+    { level: 0.2, color: "#009999" },// Deep ocean (-400 m)
+    { level: 0.37, color: "#94D4D4" }, // Shallow water (400 m)
+    { level: 0.402, color: "#567C41" }, // Coastal lowlands (1200 m)
+    { level: 0.45, color: "#77A85A" }, // Lowlands (2700 m)
     { level: 0.65, color: "#f2d671" }, // Highlands (4000 m)
-    { level: 0.75, color: "#ff8000" }, // Mountains (5300 m)
-    { level: 0.85, color: "#a6421c" }, // Very high mountains (6600 m)
-    { level: 0.95, color: "#9f9f9f" }, // Very high mountains (6600 m)
+    { level: 0.78, color: "#ff8000" }, // Mountains (5300 m)
+    { level: 0.88, color: "#a6421c" }, // Very high mountains (6600 m)
+    { level: 0.96, color: "#9f9f9f" }, // Very high mountains (6600 m)
     { level: 1.0, color: "#ffffff" }   // Extreme elevations (8000 m)
 
 ]);

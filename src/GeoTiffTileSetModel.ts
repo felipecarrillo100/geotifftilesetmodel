@@ -17,16 +17,11 @@ import {RasterSamplingMode} from "@luciad/ria/model/tileset/RasterSamplingMode.j
 import type {HttpRequestHeaders, HttpRequestParameters} from "@luciad/ria/util/HttpRequestOptions.js";
 import {ModelDescriptor} from "@luciad/ria/model/ModelDescriptor";
 import {RetiledGeoTIFFImage} from "./RetiledGeoTIFFImage";
-import {
-  detectPixelFormat,
-  detectSamplingMode,
-  getPixelFormatMeaning,
-  isLikelyCOG,
-  normalizeRawTypedArray
-} from "./utils";
+import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedArray} from "./utils";
 import {PixelMeaningEnum} from "./interfaces";
 import {convert16To8BitRGB, convert32FloatTo8BitRGB, convert8To8BitRGB, downscale16to8bits} from "./bitstorgb";
 import {GrayScaleTransformation} from "./gradients";
+import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
 
 const pool = new Pool();
 
@@ -140,7 +135,6 @@ export interface GeoTiffTileSetModelInfo {
   samplingMode: RasterSamplingMode;
 }
 
-
 export class GeoTiffTileSetModel extends RasterTileSetModel {
 
   private _images: GeoTIFFImage[];
@@ -151,7 +145,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   private _transformation: ((x: number) => [number, number, number]) | undefined;
   private _bandsNumber: number;
   private _pixelFormatMeaning: PixelMeaningEnum;
-
+  private bandMapping: BandMapping;
 
   constructor(options: GeoTiffTileSetModelOptions) {
     super(options);
@@ -159,8 +153,9 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const {format, nodata, bands, transformation} = options;
     this._images = images;
     this._maskImages = maskImages;
-    this._pixelFormat = format ? format : detectPixelFormat(images[0]);
-    this._pixelFormatMeaning = getPixelFormatMeaning(images[0]);
+    const pixelResult = analyzePixelFormat(images[0]);
+    this._pixelFormat = format ? format : pixelResult.format;
+    this._pixelFormatMeaning = pixelResult.meaning;
     this._nodata = nodata;
     this._bands = bands ;
     this._transformation = transformation;
@@ -170,15 +165,21 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       source: "Open Geospatial Consortium (OGC) "
     } as ModelDescriptor;
     this._bandsNumber =  images[0].getSamplesPerPixel();
+    this.bandMapping = {
+      red: 1,
+      green: 1,
+      blue: 1,
+      gray: 1,
+      rgb: true
+    };
   }
 
-  public static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF): GeoTiffTileSetModelInfo {
+  public static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
 
     const bytesPerPixel = tile0.getBytesPerPixel();
     const bitsPerSample = tile0.getBitsPerSample();
     const bands = tile0.getSamplesPerPixel();
-    const pixelMeaning = getPixelFormatMeaning(tile0);
-    const pixelFormat = detectPixelFormat(tile0);
+    const pixelResult = analyzePixelFormat(tile0);
 
     const tileWidth = tile0.getTileWidth();
     const tileHeight = tile0.getTileHeight();
@@ -186,7 +187,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const height = tile0.getHeight();
     const isTiled = tile0.isTiled;
 
-    const isCog= isLikelyCOG(tile0, tiff);
+    const isCog= tiff ? isLikelyCOG(tile0, tiff) : true;
     const geoKeys = tile0.geoKeys;
     const crsName = getReferenceFromEPSGCode(geoKeys);
     const samplingMode = detectSamplingMode(tile0);
@@ -199,12 +200,16 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       bitsPerSample,
       bands,
       isTiled,
-      pixelMeaning,
-      pixelFormat,
+      pixelMeaning: pixelResult.meaning,
+      pixelFormat: pixelResult.format,
       isCog,
       projection: crsName,
       samplingMode
     };
+  }
+
+  public getModelInfo() {
+    return GeoTiffTileSetModel.getInfo(this._images[0]);
   }
 
   public setTransformation(transformation:  (x: number) => [number, number, number]) {
@@ -316,7 +321,20 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         onError(tile, error)
       });
 
-    } else {
+    } else if (this._bandsNumber >= 1 && this._pixelFormatMeaning === PixelMeaningEnum.Multiband) {
+      const rasterPromise = image.readRasters({window, pool, interleave: true, signal: signal!, samples: this._bands});
+      const maskPromise = maskImage ? maskImage.readRasters({window, pool, signal: signal!}) : Promise.resolve(null);
+      Promise.all([rasterPromise, maskPromise]).then(raws => {
+        const rawValuesOrArray = raws[0];
+
+        let raw  = (Array.isArray(rawValuesOrArray) ? rawValuesOrArray[0] : rawValuesOrArray) as ReadRasterResult;
+        // console.assert(raw.length === (tileWidth * tileHeight * bands.length));
+        if (raw.length < (tileWidth * tileHeight)) {
+          raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
+        }
+        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+      });
+    }  else {
       const pixelFormat_ = this._pixelFormat;
       const rgbPromise = image.readRGB({window, pool, enableAlpha: pixelFormat_ === PixelFormat.RGBA_8888, signal: signal!});
       const maskPromise = maskImage ? maskImage.readRasters({window, pool, signal: signal!}) : Promise.resolve(null);

@@ -6,71 +6,57 @@ import {RasterSamplingMode} from "@luciad/ria/model/tileset/RasterSamplingMode";
 /**
  * Determines the meaning of a pixel format based on TIFF metadata.
  */
-export function getPixelFormatMeaning(image: GeoTIFFImage): PixelMeaningEnum {
+export function analyzePixelFormat(image: GeoTIFFImage) {
     const samplesPerPixel = image.getSamplesPerPixel();
     const bitsPerSample = image.getBitsPerSample();
     const bytesPerPixel = image.getBytesPerPixel();
     const isRGB = image.getFileDirectory().PhotometricInterpretation === 2;
-    // Normalize bitsPerSample to a number
-    const bits = Array.isArray(bitsPerSample)
-        ? bitsPerSample[0] // assume uniform
-        : bitsPerSample;
-
-    // Common cases
-    if (samplesPerPixel === 1) {
-        if (bits === 8 && bytesPerPixel === 1) return PixelMeaningEnum.Grayscale8;
-        if (bits === 16 && bytesPerPixel === 2) return PixelMeaningEnum.Grayscale16;
-        if (bits === 32 && bytesPerPixel === 4) return PixelMeaningEnum.Grayscale32;
-    }
-
-    if (samplesPerPixel === 3 && isRGB) {
-        if (bits === 8 && bytesPerPixel === 3) return PixelMeaningEnum.RGB;   // 8x3 = 24
-        if (bits === 32 && bytesPerPixel === 12) return PixelMeaningEnum.RGB96; // 32x3 =96
-    }
-
-    if (samplesPerPixel === 4 && isRGB) {
-        if (bits === 8 && bytesPerPixel === 4) return PixelMeaningEnum.RGBA;
-    }
-
-    if (samplesPerPixel > 1) {
-        return PixelMeaningEnum.Multiband;
-    }
-
-    return PixelMeaningEnum.Unknown;
-}
-
-
-export function detectPixelFormat(image: GeoTIFFImage): PixelFormat {
-    const samplesPerPixel = image.getSamplesPerPixel();
-    const bitsPerSample = image.getBitsPerSample();
-    const bytesPerPixel = image.getBytesPerPixel();
 
     // Normalize bitsPerSample to a single number (assuming uniform bits)
     const bits = Array.isArray(bitsPerSample) ? bitsPerSample[0] : bitsPerSample;
 
-    if (samplesPerPixel === 3 && bits === 8 && bytesPerPixel === 3) {
-        return PixelFormat.RGB_888;
-    }
+    let meaning: PixelMeaningEnum = PixelMeaningEnum.Unknown;
+    let format: PixelFormat | null = null;
 
-    if (samplesPerPixel === 4 && bits === 8 && bytesPerPixel === 4) {
-        return PixelFormat.RGBA_8888;
-    }
-
+    // Determine pixel meaning
     if (samplesPerPixel === 1) {
+        if (bits === 8 && bytesPerPixel === 1) meaning = PixelMeaningEnum.Grayscale8;
+        else if (bits === 16 && bytesPerPixel === 2) meaning = PixelMeaningEnum.Grayscale16;
+        else if (bits === 32 && bytesPerPixel === 4) meaning = PixelMeaningEnum.Grayscale32;
+    }
+
+    if (samplesPerPixel === 3 && isRGB) {
+        if (bits === 8 && bytesPerPixel === 3) meaning = PixelMeaningEnum.RGB;
+        else if (bits === 32 && bytesPerPixel === 12) meaning = PixelMeaningEnum.RGB96;
+    }
+
+    if (samplesPerPixel === 4 && isRGB) {
+        if (bits === 8 && bytesPerPixel === 4) meaning = PixelMeaningEnum.RGBA;
+    }
+
+    if (samplesPerPixel > 1 && meaning === PixelMeaningEnum.Unknown) {
+        meaning = PixelMeaningEnum.Multiband;
+    }
+
+    // Determine pixel format
+    if (samplesPerPixel === 3 && bits === 8 && bytesPerPixel === 3) {
+        format = PixelFormat.RGB_888;
+    } else if (samplesPerPixel === 4 && bits === 8 && bytesPerPixel === 4) {
+        format = PixelFormat.RGBA_8888;
+    } else if (samplesPerPixel === 1) {
         if (bits === 16 && bytesPerPixel === 2) {
-            return PixelFormat.USHORT;
-        }
-        if (bits === 32 && bytesPerPixel === 4) {
+            format = PixelFormat.USHORT;
+        } else if (bits === 32 && bytesPerPixel === 4) {
             // Unsigned int 32 or float32? Check if float or int, assuming image has a method to tell this
             if (isFloat32Data(image)) {
-                return PixelFormat.FLOAT_32;
+                format = PixelFormat.FLOAT_32;
+            } else {
+                format = PixelFormat.UINT_32;
             }
-            return PixelFormat.UINT_32;
         }
     }
 
-    // If none matched, throw or fallback as needed:
-    return null;
+    return { meaning, format };
 }
 
 function isFloat32Data(image: GeoTIFFImage): boolean {
