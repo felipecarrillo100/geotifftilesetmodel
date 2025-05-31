@@ -166,11 +166,11 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     } as ModelDescriptor;
     this._bandsNumber =  images[0].getSamplesPerPixel();
     this.bandMapping = {
-      red: 1,
-      green: 1,
-      blue: 1,
-      gray: 1,
-      rgb: true
+      red: 0,
+      green: 0,
+      blue: 0,
+      gray: 0,
+      rgb: false
     };
   }
 
@@ -212,9 +212,14 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     return GeoTiffTileSetModel.getInfo(this._images[0]);
   }
 
-  public setTransformation(transformation:  (x: number) => [number, number, number]) {
+  public setTransformation(transformation:  (x: number) => [number, number, number], invalidate=true) {
     this._transformation = transformation;
-    this.invalidate();
+    if (invalidate) this.invalidate();
+  }
+
+  public setBandMapping(bandMapping: BandMapping, invalidate=true) {
+    this.bandMapping = bandMapping;
+    if (invalidate) this.invalidate();
   }
 
   getTileData(
@@ -321,8 +326,9 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         onError(tile, error)
       });
 
-    } else if (this._bandsNumber >= 1 && this._pixelFormatMeaning === PixelMeaningEnum.Multiband) {
-      const rasterPromise = image.readRasters({window, pool, interleave: true, signal: signal!, samples: this._bands});
+    } else if (this._bandsNumber > 1 && this._pixelFormatMeaning === PixelMeaningEnum.Multiband) {
+      const createNumberArray = (n: number): number[] =>  Array.from({ length: n + 1 }, (_, index) => index);
+      const rasterPromise = image.readRasters({window, pool, interleave: true, signal: signal!});
       const maskPromise = maskImage ? maskImage.readRasters({window, pool, signal: signal!}) : Promise.resolve(null);
       Promise.all([rasterPromise, maskPromise]).then(raws => {
         const rawValuesOrArray = raws[0];
@@ -333,6 +339,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
           raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
         }
         let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+        const pixelFormat = PixelFormat.RGBA_8888;
+        onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       });
     }  else {
       const pixelFormat_ = this._pixelFormat;
