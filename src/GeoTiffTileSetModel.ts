@@ -26,8 +26,16 @@ import {
 } from "./bitstorgb";
 import {GrayScaleTransformation} from "./gradients";
 import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
+import {getReferenceFromPrjFile} from "./fileutils";
 
 const pool = new Pool();
+
+export interface GetInfoGeotiffFromUrlOptions {
+  // For access
+  credentials?: boolean;
+  requestHeaders?: null | HttpRequestHeaders;
+  requestParameters?: null | HttpRequestParameters;
+}
 
 export interface CreateGeotiffFromUrlOptions {
   // For access
@@ -38,9 +46,6 @@ export interface CreateGeotiffFromUrlOptions {
   dataType?: RasterDataType;
   reference?: CoordinateReference;
   nodata?: number;
-  format?: PixelFormat;
-  bounds?: Bounds;
-  bands?: number[];
   transformation?: (x: number) => [number, number, number];
 }
 
@@ -222,8 +227,18 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   }
 
   public setBandMapping(bandMapping: BandMapping, invalidate=true) {
-    this.bandMapping = bandMapping;
+    this.bandMapping = bandMapping ? bandMapping : {
+      gray: 0,
+      red: 0,
+      green: 0,
+      blue: 0,
+      rgb: false
+    };
     if (invalidate) this.invalidate();
+  }
+
+  public getBandMapping(bandMapping: BandMapping, invalidate=true) {
+    return this.bandMapping;
   }
 
   getTileData(
@@ -410,7 +425,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     return {data, pixelFormat};
   }
 
-  static async infoFromURL(url: string, options: CreateGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModelInfo> {
+  static async infoFromURL(url: string, options: GetInfoGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModelInfo> {
     const geoTiffFile = await fromUrl(url, {
       allowFullFile: true,
       headers: options.requestHeaders,
@@ -418,7 +433,12 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     });
     geoTiffFile.cache = true;
     const mostDetailedImage = await geoTiffFile.getImage(0);
-    return GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile)
+    const info = GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile);
+    if (info.projection) {
+      const crs = await getReferenceFromPrjFile(url, options);
+      if (crs) info.projection === crs;
+    }
+    return info;
   }
 
 
@@ -464,12 +484,9 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     if (!isLikelyCOG(mostDetailedImage, geoTiffFile)) {
       const error = new Error("Error creating Geotiff Model") as any;
       error.cause = "NOTCOG";
-      error.bands = options.bands; // Add any extra parameter you need
       throw error;
     }
-    if (options.bounds) {
-      bounds = options.bounds;
-    } else if (options.reference) {
+    if (options.reference) {
       const reference = options.reference;
       if (reference.identifier === "CRS:1") {
         bounds = createPixelBound(mostDetailedImage);
@@ -481,26 +498,23 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       let reference;
       const epsgCode = getReferenceFromEPSGCode(geoKeys);
       try {
-         reference = getReference(epsgCode)
+        reference = getReference(epsgCode);
+        if (reference) {
+          const bbox = mostDetailedImage.getBoundingBox();
+          bounds = createBounds(reference, [bbox[0], bbox[2] - bbox[0], bbox[1], bbox[3] - bbox[1]]);
+        }
       } catch (e) {
         const error = new Error("Error creating Geotiff Models") as any;
         error.cause = "UnknownIdentifier";
         error.identifier = epsgCode; // Add any extra parameter you need
         throw error;
       }
-      if (reference) {
-        const bbox = mostDetailedImage.getBoundingBox();
-        bounds = createBounds(reference, [bbox[0], bbox[2] - bbox[0], bbox[1], bbox[3] - bbox[1]]);
-      } else {
-        reference = await getReferenceFromPrjFile(url, {requestHeaders: options.requestHeaders, credentials: options.credentials});
-        if (reference) {
-          const bbox = mostDetailedImage.getBoundingBox();
-          bounds = createBounds(reference, [bbox[0], bbox[2] - bbox[0], bbox[1], bbox[3] - bbox[1]]);
-        } else {
-          console.warn("Could not deduce the coordinate reference of " + url + ". Will use a pixel reference.");
-          bounds = createPixelBound(mostDetailedImage);
-        }
-      }
+    }
+
+    if (!bounds) {
+      const error = new Error("Error creating Geotiff Models") as any;
+      error.cause = "BoundsMissing";
+      throw error;
     }
 
     const tileMatrix: TileMatrix[] = [];
@@ -509,18 +523,11 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const dataType = options.dataType ?  options.dataType : RasterDataType.IMAGE;
     const samplingMode = detectSamplingMode(mostDetailedImage);
 
-    // Float conversion to 8 bit RGB via readRGB tends to not work out as expected.  So do a band selection instead.
-    const bitsPerSample = mostDetailedImage.getBitsPerSample();
-    if (dataType === RasterDataType.IMAGE && bitsPerSample === 32 && isUndefined(options.bands)) {
-      const samplesPerPixel = mostDetailedImage.getSamplesPerPixel();
-      options.bands = samplesPerPixel >= 3 ? [0, 1, 2] : [0];
-    }
-
+    // Getting images and tile matrices
     const imageCount = await geoTiffFile.getImageCount();
     for (let level = imageCount - 1; level >= 0; level--) {
       let image = await geoTiffFile.getImage(level);
       const newSubfileType = image.getFileDirectory().NewSubfileType;
-    //  const maskImage = isDefined(newSubfileType) && (newSubfileType & (1 << 2)) !== 0; // Bit 2 indicates mask.
       const isMask = (newSubfileType & 0b100) !== 0;
 
       if (image.getTileWidth() === image.getWidth() && image.getTileHeight() === image.getHeight()) {
@@ -556,9 +563,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       samplingMode,
       images,
       maskImages,
-      format: options.format,
       nodata: options.nodata,
-      bands: options.bands,
       transformation: options.transformation
     };
     return new GeoTiffTileSetModel(modelOptions);
@@ -585,27 +590,6 @@ function getReferenceFromEPSGCode(geoKeys: any) {
     return `EPSG:${selectedGeoKey}`;
 }
 
-async function getReferenceFromPrjFile(url: string, options: {
-  requestHeaders: HttpRequestHeaders | null | undefined;
-  credentials: boolean | undefined
-}) {
-  try {
-    const prjPath = url.slice(0, url.lastIndexOf(".") + 1) + "prj";
-    const prj = await getFileContent(prjPath, options);
-    return parseWellKnownText(prj);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getFileContent(url: string, options:{ headers?: HttpRequestHeaders, credentials?: boolean}): Promise<string> {
-  const x = await fetch(url, {
-    headers: options.headers,
-    credentials: options.credentials ? "same-origin" : "omit",
-  });
-  return await x.text();
-}
 
 function createPixelBound(image : GeoTIFFImage) {
   return createBounds(getReference("CRS:1"), [0, image.getWidth(), 0, image.getHeight()]);
