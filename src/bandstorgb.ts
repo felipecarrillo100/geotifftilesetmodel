@@ -65,14 +65,25 @@ function bandMapping(multibands, options: ConvertBandsTo8BitRGBOptions) {
     const {bandMapping, nodata} = options;
     const rawData = multibands;
     const onUndefinedConvert = (v: number)=> typeof v !== "undefined" ? options.convert(v) : 0;
-    const alpha = 1;
     if (options.bandMapping.rgb) {
-        const red = rawData[bandMapping.red];
-        const green = rawData[bandMapping.green];
-        const blue = rawData[bandMapping.blue];
-        return [onUndefinedConvert(red), onUndefinedConvert(green), onUndefinedConvert(blue), alpha];
+        const { red, green, blue } = bandMapping;
+
+        const redValue = rawData[red];
+        const greenValue = rawData[green];
+        const blueValue = rawData[blue];
+
+        const zeroCount = [redValue, greenValue, blueValue].filter(value => value === nodata).length;
+        const alpha = 255 * (1 - (zeroCount / 3)); // 0 if all are zero, 1 if none are zero
+
+        return [
+            onUndefinedConvert(redValue),
+            onUndefinedConvert(greenValue),
+            onUndefinedConvert(blueValue),
+            alpha
+        ];
     } else {
         const gray = rawData[bandMapping.gray];
+        const alpha = gray === nodata ? 0 : 255;
         const rgbTransformation = options.transformation ? options.transformation : GrayScaleTransformation;
         const x = onUndefinedConvert(gray)/255;
         const rgb = rgbTransformation(x);

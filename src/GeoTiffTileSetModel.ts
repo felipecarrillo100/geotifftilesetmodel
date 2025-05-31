@@ -19,7 +19,11 @@ import {ModelDescriptor} from "@luciad/ria/model/ModelDescriptor";
 import {RetiledGeoTIFFImage} from "./RetiledGeoTIFFImage";
 import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedArray} from "./utils";
 import {PixelMeaningEnum} from "./interfaces";
-import {convert16To8BitRGB, convert32FloatTo8BitRGB, convert8To8BitRGB, downscale16to8bits} from "./bitstorgb";
+import {
+  convert32FloatTo8BitRGB,
+  convertSingleBandTo8BitRGB,
+  downscale16to8bits
+} from "./bitstorgb";
 import {GrayScaleTransformation} from "./gradients";
 import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
 
@@ -296,17 +300,10 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         let pixelFormat = pixelFormatBandUndefined;
         let data: Uint8Array;
         const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
-        if (this._pixelFormatMeaning === PixelMeaningEnum.Grayscale8) {
-          data = convert8To8BitRGB(raw as Uint8Array, {samplesPerPixel: bands.length, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
-        } else
-        if (image.getBitsPerSample() == 32) {
+        if (image.getBitsPerSample() == 32 && this._pixelFormat === PixelFormat.FLOAT_32) {
           data = convert32FloatTo8BitRGB(raw as Float32Array, bands.length, nodata, transformation); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         } else {
-          if (image.getBitsPerSample() == 16) {
-            data = convert16To8BitRGB(raw as Uint16Array, {samplesPerPixel: bands.length, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
-          } else {
-            data = convert8To8BitRGB(raw as Uint8Array, {samplesPerPixel: bands.length, transformation, nodata}); // Takes care of the 1 band to 3 bands conversion.
-          }
+          data = convertSingleBandTo8BitRGB(raw, {bits:image.getBitsPerSample(), samplesPerPixel: 1, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
           if (isNumber(nodata)) {
             pixelFormat =  PixelFormat.RGBA_8888
           } else {

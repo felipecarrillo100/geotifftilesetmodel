@@ -1,4 +1,5 @@
 import {GrayScaleTransformation} from "./gradients";
+import {ReadRasterResult} from "geotiff";
 
 /**
  * Downscale a Uint16Array (16-bit samples) to Uint8Array (8-bit samples).
@@ -15,32 +16,28 @@ export function downscale16to8bits(input: Uint16Array): Uint8Array {
 
 
 interface ConvertTo8BitRGBOptions {
+    bits: number;
     convert?: (x:number) => number,
     samplesPerPixel?: number,
     transformation?: (x: number) => [number, number, number],
     nodata?: number
 }
 
-/**
- * Conversion but also Grayscale32 -> 3 bands conversion.
- */
-export function convert32To8BitRGB(raw: Uint32Array, options: ConvertTo8BitRGBOptions): Uint8Array {
-    return convertTo8BitRGB(raw,  { ...options, convert:(x: number) => x/(255*255*255*255)});
-}
-
-
-/**
- * Conversion but also Grayscale16 -> 3 bands conversion.
- */
-export function convert16To8BitRGB(raw: Uint16Array, options: ConvertTo8BitRGBOptions): Uint8Array {
-    return convertTo8BitRGB(raw,  { ...options, convert:(x: number) => x/(255*255)});
-}
 
 /**
  * Conversion but also Grayscale8 -> 3 bands conversion.
  */
-export function convert8To8BitRGB(raw: Uint8Array, options: ConvertTo8BitRGBOptions): Uint8Array {
-    return convertTo8BitRGB(raw, { ...options, convert:(x: number) => x/255});
+export function convertSingleBandTo8BitRGB(raw: ReadRasterResult, options: ConvertTo8BitRGBOptions): Uint8Array {
+    let  divider = 1;
+    switch (options.bits) {
+        case 16:
+            divider = 255;
+            break;
+        case 32:
+            divider = 255*255*255;
+            break;
+    }
+    return convertTo8BitRGB(raw as Uint8Array | Uint16Array | Uint32Array, { ...options, convert:(x: number) => x/divider});
 }
 
 /**
@@ -52,7 +49,7 @@ export function convertTo8BitRGB( raw: Uint8Array | Uint16Array | Uint32Array, o
     const newRaw =  new Uint8Array(oldRaw.length * bands);
     //
     for (let index = 0; index < oldRaw.length; index++) {
-        const normalizedValue = options.convert(oldRaw[index]); // Standardize Gradient from 0 to 1
+        const normalizedValue = options.convert(oldRaw[index]) / 255; // Standardize Gradient from 0 to 1
         const rgb = options.transformation ? options.transformation(normalizedValue) : GrayScaleTransformation(normalizedValue);
         for (let j = 0; j < bands; j++) {
             if (j<3) {

@@ -10,7 +10,8 @@ export function analyzePixelFormat(image: GeoTIFFImage) {
     const samplesPerPixel = image.getSamplesPerPixel();
     const bitsPerSample = image.getBitsPerSample();
     const bytesPerPixel = image.getBytesPerPixel();
-    const isRGB = image.getFileDirectory().PhotometricInterpretation === 2;
+    const fileDirectory = image.getFileDirectory();
+    const isRGB = fileDirectory.PhotometricInterpretation === 2;
 
     // Normalize bitsPerSample to a single number (assuming uniform bits)
     const bits = Array.isArray(bitsPerSample) ? bitsPerSample[0] : bitsPerSample;
@@ -48,7 +49,7 @@ export function analyzePixelFormat(image: GeoTIFFImage) {
             format = PixelFormat.USHORT;
         } else if (bits === 32 && bytesPerPixel === 4) {
             // Unsigned int 32 or float32? Check if float or int, assuming image has a method to tell this
-            if (isFloat32Data(image)) {
+            if (isFloat32Data(fileDirectory)) {
                 format = PixelFormat.FLOAT_32;
             } else {
                 format = PixelFormat.UINT_32;
@@ -59,8 +60,7 @@ export function analyzePixelFormat(image: GeoTIFFImage) {
     return { meaning, format };
 }
 
-function isFloat32Data(image: GeoTIFFImage): boolean {
-    const fileDir = image.getFileDirectory();
+function isFloat32Data(fileDir: any): boolean {
     const sampleFormat = fileDir.SampleFormat ?? [1]; // Default is unsigned int
     const bitsPerSample = fileDir.BitsPerSample ?? [8]; // Default is 8 bits
 
