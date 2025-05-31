@@ -324,18 +324,18 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       });
 
     } else if (this._bandsNumber > 1 && this._pixelFormatMeaning === PixelMeaningEnum.Multiband) {
-      const createNumberArray = (n: number): number[] =>  Array.from({ length: n + 1 }, (_, index) => index);
       const rasterPromise = image.readRasters({window, pool, interleave: true, signal: signal!});
       const maskPromise = maskImage ? maskImage.readRasters({window, pool, signal: signal!}) : Promise.resolve(null);
       Promise.all([rasterPromise, maskPromise]).then(raws => {
         const rawValuesOrArray = raws[0];
+        const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
 
         let raw  = (Array.isArray(rawValuesOrArray) ? rawValuesOrArray[0] : rawValuesOrArray) as ReadRasterResult;
         // console.assert(raw.length === (tileWidth * tileHeight * bands.length));
         if (raw.length < (tileWidth * tileHeight)) {
           raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
         }
-        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, transformation, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         const pixelFormat = PixelFormat.RGBA_8888;
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       });

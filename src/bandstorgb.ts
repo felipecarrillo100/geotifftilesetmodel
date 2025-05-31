@@ -72,8 +72,7 @@ function bandMapping(multibands, options: ConvertBandsTo8BitRGBOptions) {
         const greenValue = rawData[green];
         const blueValue = rawData[blue];
 
-        const zeroCount = [redValue, greenValue, blueValue].filter(value => value === nodata).length;
-        const alpha = 255 * (1 - (zeroCount / 3)); // 0 if all are zero, 1 if none are zero
+        const alpha = (redValue !== nodata || greenValue !== nodata || blueValue !== nodata) ? 255 : 0;
 
         return [
             onUndefinedConvert(redValue),
