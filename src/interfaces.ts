@@ -1,22 +1,6 @@
-export enum PhotometricInterpretation {
-    WhiteIsZero = 0,
-    BlackIsZero = 1,
-    RGB = 2,
-    PaletteColor = 3,
-    TransparencyMask = 4,
-    CMYK = 5,
-    YCbCr = 6,
-    CIELab = 8,
-    ICCLab = 9,
-    ITULab = 10,
-    ColorFilterArray = 32803,
-    PixarLogL = 32844,
-    PixarLogLuv = 32845,
-    LinearRaw = 34892,
-    Depth = 51177,
-    DepthAndConfidence = 51178,
-}
-
+/**
+ * LuciadRIA autodetected possible Value of the pixel
+ */
 export enum PixelMeaningEnum {
     Grayscale8 = "Grayscale8",
     Grayscale16 = "Grayscale16",
@@ -28,11 +12,25 @@ export enum PixelMeaningEnum {
     Unknown = "Unknown",
 }
 
-// Defines a single color stop in the colormap
+/**
+ * Defines a single color stop in the colormap.
+ */
 interface GradientColorMapStep {
-    level: number;       // Normalized value from 0.0 to 1.0
-    color: string;       // Hex color string (e.g., "#ffffff")
-};
+    /**
+     * A normalized value representing the position of the color stop within the gradient.
+     * Should be a float between 0.0 and 1.0, where 0.0 is the start and 1.0 is the end of the gradient.
+     */
+    level: number;
 
-// Defines the entire colormap as an array of color stops
+    /**
+     * The color associated with this stop in the gradient, represented as a hex color string.
+     * For example, "#ffffff" for white.
+     */
+    color: string;
+}
+
+/**
+ * Represents the entire colormap as an array of color stops.
+ * Each color stop is defined by the `GradientColorMapStep` interface.
+ */
 export type CogGradientColorMap = GradientColorMapStep[];

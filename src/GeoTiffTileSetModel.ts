@@ -31,26 +31,81 @@ import {createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
 const pool = new Pool();
 
+/**
+ * Options for retrieving GeoTIFF information from a URL.
+ */
 export interface GetInfoGeotiffFromUrlOptions {
-  // For access
+  /**
+   * Indicates whether credentials such as cookies or authentication headers should be included in the request.
+   * Defaults to `false` if not specified.
+   */
   credentials?: boolean;
+
+  /**
+   * Optional headers to include in the HTTP request.
+   * Can be `undefined` if no additional headers are needed.
+   */
   requestHeaders?: null | HttpRequestHeaders;
+
+  /**
+   * Optional parameters to include in the HTTP request.
+   * Can be `undefined` if no additional parameters are needed.
+   */
   requestParameters?: null | HttpRequestParameters;
 }
 
+/**
+ * Options for creating a GeoTIFF from a URL.
+ */
 export interface CreateGeotiffFromUrlOptions {
-  // For access
+  /**
+   * Indicates whether credentials such as cookies or authentication headers should be included in the request.
+   * Defaults to `false` if not specified.
+   */
   credentials?: boolean;
+
+  /**
+   * Optional headers to include in the HTTP request.
+   * Can be `undefined` if no additional headers are needed.
+   */
   requestHeaders?: null | HttpRequestHeaders;
+
+  /**
+   * Optional parameters to include in the HTTP request.
+   * Can be `undefined` if no additional parameters are needed.
+   */
   requestParameters?: null | HttpRequestParameters;
-  // For processing
+
+  /**
+   * The data type of the raster data to be processed.
+   * This defines the format of the data as LuciadRIA enum RasterDataType.IMAGE or RasterDataType.ELEVATION.
+   */
   dataType?: RasterDataType;
+
+  /**
+   * The coordinate reference system to be used for the GeoTIFF.
+   * This defines how the spatial data is projected, use type LuciadRIA CoordinateReference.
+   */
   reference?: CoordinateReference;
+
+  /**
+   * The value to be used to represent 'no data' in the raster.
+   * This is typically a special value that indicates missing or undefined data, if not defined 0 is assumed to be nodata.
+   */
   nodata?: number;
+
+  /**
+   * The mapping of bands in the raster data as defined in interface `BandMapping`
+   * This defines how different bands are interpreted or used.
+   */
   bandMapping?: BandMapping;
+
+  /**
+   * The gradient color map to apply to the Cloud Optimized GeoTIFF (COG).
+   * This defines how data values are translated into colors, refer to type `CogGradientColorMap`.
+   */
   gradient?: CogGradientColorMap;
 }
-
 
 function convertRGBToRGBA(raw: Uint8Array): Uint8Array {
   const newRaw = new Uint8Array(raw.length * 4 / 3);
@@ -114,7 +169,9 @@ function hasPhotometricInterpretation(image: GeoTIFFImage, photometricInterpreta
   return image.getFileDirectory().PhotometricInterpretation === photometricInterpretation;
 }
 
-
+/**
+ * This object is private, no need to document
+ */
 interface GeoTiffTileSetModelOptions extends RasterTileSetModelConstructorOptions{
   // For access
   credentials?: boolean;
@@ -131,19 +188,73 @@ interface GeoTiffTileSetModelOptions extends RasterTileSetModelConstructorOption
   gradient?: CogGradientColorMap;
 }
 
+/**
+ * Presents the information retrieved from a GeoTIFF tile set.
+ */
 export interface GeoTiffTileSetModelInfo {
+  /**
+   * The width of each tile in pixels.
+   */
   tileWidth: number;
+
+  /**
+   * The height of each tile in pixels.
+   */
   tileHeight: number;
+
+  /**
+   * The total width of the image in pixels.
+   */
   width: number;
+
+  /**
+   * The total height of the image in pixels.
+   */
   height: number;
+
+  /**
+   * The number of bytes per pixel.
+   */
   bytesPerPixel: number;
+
+  /**
+   * The number of bits per sample. This can be a single number or an array of numbers.
+   */
   bitsPerSample: number | number[];
+
+  /**
+   * The number of bands in the image.
+   */
   bands: number;
+
+  /**
+   * Indicates whether the image is tiled.
+   */
   isTiled: boolean;
+
+  /**
+   * The meaning of the pixel values, represented by a `PixelMeaningEnum`.
+   */
   pixelMeaning: PixelMeaningEnum;
+
+  /**
+   * Autodetected LuciadRIA pixel format
+   */
   pixelFormat: PixelFormat;
+
+  /**
+   * Indicates whether the image is a Cloud Optimized GeoTIFF (COG).
+   */
   isCog: boolean;
+
+  /**
+   * The projection information of the image in string format (i.e. 'EPSG:3857').
+   */
   projection: string;
+
+  /**
+   * The sampling mode used for raster data RasterSamplingMode.AREA or RasterSamplingMode.POINT
+   */
   samplingMode: RasterSamplingMode;
 }
 
@@ -251,18 +362,17 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     if (invalidate) this.invalidate();
   }
 
+  /**
+   * Gets the gradient
+   * @returns the currently used normalized `gradient`.
+   */
   private getNormalizedGradient() {
     return this.gradient;
   }
 
   /**
    * Sets the bandMapping object.
-   * @param bandMapping - The mapping of the bands
-   * @param bandMapping.red - The zero-based index of the band where red color is located
-   * @param bandMapping.green - The zero-based index of the band where green color is located
-   * @param bandMapping.blue - The zero-based index of the band where blue color is located
-   * @param bandMapping.gray - The zero-based index of the band where gray color is located
-   * @param bandMapping.rgb - A boolean,set to true to indicated RGB, set too false to use one band as grayscale or gradient
+   * @param bandMapping - The mapping of the bands as defined in `BandMapping`
    * @param invalidate - Set to false if you don't want to trigger a repaint
    */
   public setBandMapping(bandMapping: BandMapping, invalidate=true) {
@@ -278,6 +388,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
 
   /**
    * Gets the bandMapping
+   * @returns the currently used `bandMapping`.
    */
   public getBandMapping() {
     return this.bandMapping;
@@ -296,6 +407,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   /**
    * Gets the nodata value.
    * The nodata value will be set as transparent if found in the data
+   * @returns the currently used `nodata` value.
    */
   public getNodata() {
     return this._nodata;

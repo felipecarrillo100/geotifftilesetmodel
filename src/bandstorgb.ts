@@ -1,11 +1,39 @@
 import {ReadRasterResult} from "geotiff";
 import {GrayScaleTransformation} from "./gradients";
 
+/**
+ * Represents the mapping of color bands in a raster image.
+ */
 export interface BandMapping {
-    red: number,
-    green: number,
-    blue: number,
-    gray: number,
+    /**
+     * The zero-based index of the band used for the red channel.
+     * This specifies which band in the raster data corresponds to the red color.
+     */
+    red: number;
+
+    /**
+     * The zero-based index of the band used for the green channel.
+     * This specifies which band in the raster data corresponds to the green color.
+     */
+    green: number;
+
+    /**
+     * The zero-based index of the band used for the blue channel.
+     * This specifies which band in the raster data corresponds to the blue color.
+     */
+    blue: number;
+
+    /**
+     * The zero-based index of the band used for the gray scale channel.
+     * This specifies which band in the raster data corresponds to the gray scale representation.
+     */
+    gray: number;
+
+    /**
+     * Indicates whether the mapping is for an RGB image.
+     * If `true`, the red, green, and blue properties are used to form an RGB image.
+     * If `false`, the gray is a single band to be mapped to an RGB gradient.
+     */
     rgb: boolean;
 }
 
