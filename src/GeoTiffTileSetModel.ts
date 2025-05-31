@@ -18,15 +18,16 @@ import type {HttpRequestHeaders, HttpRequestParameters} from "@luciad/ria/util/H
 import {ModelDescriptor} from "@luciad/ria/model/ModelDescriptor";
 import {RetiledGeoTIFFImage} from "./RetiledGeoTIFFImage";
 import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedArray} from "./utils";
-import {PixelMeaningEnum} from "./interfaces";
+import {CogGradientColorMap, PixelMeaningEnum} from "./interfaces";
 import {
   convert32FloatTo8BitRGB,
   convertSingleBandTo8BitRGB,
   downscale16to8bits
 } from "./bitstorgb";
-import {GrayScaleTransformation} from "./gradients";
+import {GrayscaleGradient, GrayScaleTransformation, TransformToGradientColorMap} from "./gradients";
 import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
 import {getReferenceFromPrjFile} from "./fileutils";
+import {createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
 const pool = new Pool();
 
@@ -46,7 +47,8 @@ export interface CreateGeotiffFromUrlOptions {
   dataType?: RasterDataType;
   reference?: CoordinateReference;
   nodata?: number;
-  transformation?: (x: number) => [number, number, number];
+  bandMapping?: BandMapping;
+  gradient?: CogGradientColorMap;
 }
 
 
@@ -125,7 +127,8 @@ interface GeoTiffTileSetModelOptions extends RasterTileSetModelConstructorOption
   nodata?: number;
   format?: PixelFormat;
   bands?: number[];
-  transformation?: (x: number) => [number, number, number];
+  bandMapping?: BandMapping;
+  gradient?: CogGradientColorMap;
 }
 
 export interface GeoTiffTileSetModelInfo {
@@ -155,11 +158,12 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   private _bandsNumber: number;
   private _pixelFormatMeaning: PixelMeaningEnum;
   private bandMapping: BandMapping;
+  private gradient: CogGradientColorMap;
 
   constructor(options: GeoTiffTileSetModelOptions) {
     super(options);
     const {images, maskImages} = options;
-    const {format, nodata, bands, transformation} = options;
+    const {format, nodata, bands} = options;
     this._images = images;
     this._maskImages = maskImages;
     const pixelResult = analyzePixelFormat(images[0]);
@@ -167,20 +171,21 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     this._pixelFormatMeaning = pixelResult.meaning;
     this._nodata = nodata;
     this._bands = bands ;
-    this._transformation = transformation;
     this.modelDescriptor = {
       name: "GeoTiffTileSetModel",
       description: "The GeoTiffTileSetModel is a specialized data structure designed to handle and represent geospatial data in the form of GeoTIFF tiles",
       source: "Open Geospatial Consortium (OGC) "
     } as ModelDescriptor;
     this._bandsNumber =  images[0].getSamplesPerPixel();
-    this.bandMapping = {
+    this.bandMapping = options.bandMapping ? options.bandMapping : {
       red: 0,
       green: 0,
       blue: 0,
       gray: 0,
       rgb: false
     };
+    this.gradient = options.gradient ? options.gradient : GrayscaleGradient;
+    this._transformation = TransformToGradientColorMap(createGradientColorMap(this.gradient));
   }
 
   public static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
@@ -221,9 +226,21 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     return GeoTiffTileSetModel.getInfo(this._images[0]);
   }
 
-  public setTransformation(transformation:  (x: number) => [number, number, number], invalidate=true) {
-    this._transformation = transformation;
+  public setNormalizedGradient(gradient:CogGradientColorMap, invalidate=true) {
+    if (gradient) {
+      this.gradient = gradient;
+      const colorMap = createGradientColorMap(this.gradient);
+      this._transformation = TransformToGradientColorMap(colorMap);
+    } else {
+      this.gradient = GrayscaleGradient;
+      const colorMap = createGradientColorMap(this.gradient);
+      this._transformation = TransformToGradientColorMap(colorMap);
+    }
     if (invalidate) this.invalidate();
+  }
+
+  private getNormalizedGradient() {
+    return this.gradient;
   }
 
   public setBandMapping(bandMapping: BandMapping, invalidate=true) {
@@ -565,7 +582,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       images,
       maskImages,
       nodata: options.nodata,
-      transformation: options.transformation
+      gradient: options.gradient,
+      bandMapping: options.bandMapping,
     };
     return new GeoTiffTileSetModel(modelOptions);
   }

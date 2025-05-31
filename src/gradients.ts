@@ -1,6 +1,6 @@
 import {ColorMap, createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
-export const GrayscaleGradient = createGradientColorMap([
+export const GrayscaleGradient = [
     { "level": 0, "color": "#000000" },  // Black
     { "level": 0.0667, "color": "#111111" },
     { "level": 0.1333, "color": "#222222" },
@@ -17,7 +17,7 @@ export const GrayscaleGradient = createGradientColorMap([
     { "level": 0.8667, "color": "#DDDDDD" },
     { "level": 0.9333, "color": "#EEEEEE" },
     { "level": 1, "color": "#FFFFFF" }   // White
-]);
+];
 
 
 export function TransformToGradientColorMap(colorMap:ColorMap, range?: {min: number, max: number}) {
@@ -35,4 +35,4 @@ export function TransformToGradientColorMap(colorMap:ColorMap, range?: {min: num
     };
 }
 
-export const GrayScaleTransformation = TransformToGradientColorMap(GrayscaleGradient);
+export const GrayScaleTransformation = TransformToGradientColorMap(createGradientColorMap(GrayscaleGradient));

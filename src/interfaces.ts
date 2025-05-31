@@ -27,3 +27,12 @@ export enum PixelMeaningEnum {
     Multiband = "Multiband",
     Unknown = "Unknown",
 }
+
+// Defines a single color stop in the colormap
+interface GradientColorMapStep {
+    level: number;       // Normalized value from 0.0 to 1.0
+    color: string;       // Hex color string (e.g., "#ffffff")
+};
+
+// Defines the entire colormap as an array of color stops
+export type CogGradientColorMap = GradientColorMapStep[];
