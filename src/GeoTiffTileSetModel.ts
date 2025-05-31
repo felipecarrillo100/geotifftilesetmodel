@@ -6,7 +6,7 @@ import {
 import type {TileCoordinate} from "@luciad/ria/model/tileset/TileCoordinate.js";
 import type {GeoTIFF, ReadRasterResult, TypedArray} from "geotiff";
 import {fromUrl, GeoTIFFImage, Pool} from "geotiff";
-import {getReference, parseWellKnownText} from "@luciad/ria/reference/ReferenceProvider.js";
+import {getReference} from "@luciad/ria/reference/ReferenceProvider.js";
 import {createBounds} from "@luciad/ria/shape/ShapeFactory.js";
 import type {TileData} from "@luciad/ria/model/tileset/TileData.js";
 import {PixelFormat} from "@luciad/ria/model/tileset/PixelFormat.js";
@@ -237,7 +237,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     if (invalidate) this.invalidate();
   }
 
-  public getBandMapping(bandMapping: BandMapping, invalidate=true) {
+  // To be used by model user
+  public getBandMapping(bandMapping: BandMapping) {
     return this.bandMapping;
   }
 
@@ -595,13 +596,6 @@ function createPixelBound(image : GeoTIFFImage) {
   return createBounds(getReference("CRS:1"), [0, image.getWidth(), 0, image.getHeight()]);
 }
 
-
-/**
- * Returns whether the given value is undefined
- */
-function isUndefined(value: any): value is undefined {
-  return typeof value === "undefined";
-}
 
 /**
  * Returns whether the given value is a number
