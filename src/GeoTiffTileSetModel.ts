@@ -160,7 +160,10 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   private bandMapping: BandMapping;
   private gradient: CogGradientColorMap;
 
-  constructor(options: GeoTiffTileSetModelOptions) {
+  /**
+   * The constructor is private, don't call it directly, instead, use method: GeoTiffTileSetModel.createFromURL
+   */
+  private constructor(options: GeoTiffTileSetModelOptions) {
     super(options);
     const {images, maskImages} = options;
     const {format, nodata, bands} = options;
@@ -188,8 +191,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     this._transformation = TransformToGradientColorMap(createGradientColorMap(this.gradient));
   }
 
-  public static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
-
+  private static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
     const bytesPerPixel = tile0.getBytesPerPixel();
     const bitsPerSample = tile0.getBitsPerSample();
     const bands = tile0.getSamplesPerPixel();
@@ -222,11 +224,21 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     };
   }
 
+  /**
+   * The getModelInfo returns all the values found in the Geotiff URL
+   */
   public getModelInfo() {
     return GeoTiffTileSetModel.getInfo(this._images[0]);
   }
 
-  public setNormalizedGradient(gradient:CogGradientColorMap, invalidate=true) {
+  /**
+   * Sets the gradient array.
+   * @param gradient - The normalized gradient array
+   * @param gradient[].level - The first level must be 0, while last level must be one. Level is an ascending value.
+   * @param gradient[].color - The value of the color as a string in hex or rgb
+   * @param invalidate - Set to false if you don't want to trigger a repaint
+   */
+  public setNormalizedGradient(gradient: CogGradientColorMap, invalidate=true) {
     if (gradient) {
       this.gradient = gradient;
       const colorMap = createGradientColorMap(this.gradient);
@@ -243,6 +255,16 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     return this.gradient;
   }
 
+  /**
+   * Sets the bandMapping object.
+   * @param bandMapping - The mapping of the bands
+   * @param bandMapping.red - The zero-based index of the band where red color is located
+   * @param bandMapping.green - The zero-based index of the band where green color is located
+   * @param bandMapping.blue - The zero-based index of the band where blue color is located
+   * @param bandMapping.gray - The zero-based index of the band where gray color is located
+   * @param bandMapping.rgb - A boolean,set to true to indicated RGB, set too false to use one band as grayscale or gradient
+   * @param invalidate - Set to false if you don't want to trigger a repaint
+   */
   public setBandMapping(bandMapping: BandMapping, invalidate=true) {
     this.bandMapping = bandMapping ? bandMapping : {
       gray: 0,
@@ -254,9 +276,29 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     if (invalidate) this.invalidate();
   }
 
-  // To be used by model user
-  public getBandMapping(bandMapping: BandMapping) {
+  /**
+   * Gets the bandMapping
+   */
+  public getBandMapping() {
     return this.bandMapping;
+  }
+
+  /**
+   * Sets the nodata value.
+   * @param nodata - The value that will be set as transparent if found in the data
+   * @param invalidate - Set to false if you don't want to trigger a repaint
+   */
+  public setNodata(nodata: number, invalidate=true) {
+    this._nodata = nodata;
+    if (invalidate) this.invalidate();
+  }
+
+  /**
+   * Gets the nodata value.
+   * The nodata value will be set as transparent if found in the data
+   */
+  public getNodata() {
+    return this._nodata;
   }
 
   getTileData(
