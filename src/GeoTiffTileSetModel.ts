@@ -371,9 +371,14 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   }
 
   /**
-   * Sets the bandMapping object.
-   * @param bandMapping - The mapping of the bands as defined in `BandMapping`
-   * @param invalidate - Set to false if you don't want to trigger a repaint
+   * Sets the band mapping for the raster image and optionally invalidates the current state.
+   *
+   * @param bandMapping - The band mapping configuration, as defined by the `BandMapping` interface.
+   *   Specifies the indices for red, green, blue, and gray channels, and indicates if the mapping is for an RGB image.
+   * @param invalidate - A boolean flag indicating whether to invalidate the current state after setting the band mapping.
+   *   Defaults to `true`.
+   *
+   * @returns void
    */
   public setBandMapping(bandMapping: BandMapping, invalidate=true) {
     this.bandMapping = bandMapping ? bandMapping : {
@@ -597,6 +602,18 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     return {data, pixelFormat};
   }
 
+  /**
+   * Retrieves information about a GeoTIFF tile set model from a specified URL.
+   *
+   * @param url - The URL from which to retrieve the GeoTIFF information.
+   * @param options - Optional configuration for accessing the GeoTIFF, as defined by the `GetInfoGeotiffFromUrlOptions` interface.
+   *   - `credentials`: Indicates whether credentials should be included in the request.
+   *   - `requestHeaders`: Headers to include in the HTTP request.
+   *   - `requestParameters`: Parameters to include in the HTTP request.
+   * @returns A promise that resolves to a `GeoTiffTileSetModelInfo`, containing details about the GeoTIFF tile set model.
+   *
+   * @throws Will throw an error if the URL is invalid or the GeoTIFF information cannot be retrieved.
+   */
   static async infoFromURL(url: string, options: GetInfoGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModelInfo> {
     const geoTiffFile = await fromUrl(url, {
       allowFullFile: true,
@@ -615,32 +632,21 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
 
 
   /**
-   * Creates a RasterTileSetModel for the given URL.
+   * Creates a GeoTIFF tile set model from a specified URL.
    *
-   * <b>Geo-reference & bounds</b>
+   * @param url - The URL from which to retrieve the GeoTIFF data.
+   * @param options - Optional configuration for creating the GeoTIFF, as defined by the `CreateGeotiffFromUrlOptions` interface.
+   *   - `credentials`: Indicates whether credentials should be included in the request.
+   *   - `requestHeaders`: Headers to include in the HTTP request.
+   *   - `requestParameters`: Parameters to include in the HTTP request.
+   *   - `dataType`: The data type of the raster data to be processed `DataType`.
+   *   - `reference`: The coordinate reference system to be used `CoordinateReference`.
+   *   - `nodata`: The value representing 'no data' in the raster, by default 0.
+   *   - `bandMapping`: The mapping of bands in the raster data as defined in `BandMapping`.
+   *   - `gradient`: The gradient color map to apply as defined in `CogGradientColorMap`.
+   * @returns A promise that resolves to a `GeoTiffTileSetModel`, representing the created GeoTIFF tile set model.
    *
-   * In order, this happens:
-   * <ul>
-   *   <li>options.bounds is used</li>
-   *   <li>options.reference is used, bounds from the image bbox or pixel resolution in case of CRS:1 reference</li>
-   *   <li>EPSG code from image geoKeys is used, bounds from image bbox</li>
-   *   <li>Reference from a .prj file, located next to the geotiff, is used, bounds from image bbox</li>
-   *   <li>CRS:1 is assumed, bounds are just pixel resolution</li>
-   * </ul>
-   *
-   * <b>Pixel formats and "no data"</b>
-   *
-   * 32-bit and 16-bit imagery values are converted to 8-bit.
-   * Palette images are converted to RGB.
-   *
-   * No-data values are converted to fully transparent pixels.
-   *
-   * <b>Bands</b>
-   *
-   * If you provide the band(s) to select, the data will be treated as imagery.
-   * You can use this for example to select the bands in a multispectral image to be treated as RGB(A) or
-   * visualize a single band as a grayscale image.  You can specify a color transformation function to apply when selecting a single band.
-   *
+   * @throws Will throw an error if the URL is invalid or the GeoTIFF cannot be created.
    */
 
   static async createFromURL(url: string, options: CreateGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModel> {
