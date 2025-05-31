@@ -15,7 +15,7 @@ export enum PixelMeaningEnum {
 /**
  * Defines a single color stop in the colormap.
  */
-interface GradientColorMapStep {
+export interface GradientColorMapStep {
     /**
      * A normalized value representing the position of the color stop within the gradient.
      * Should be a float between 0.0 and 1.0, where 0.0 is the start and 1.0 is the end of the gradient.

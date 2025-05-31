@@ -104,7 +104,7 @@ export interface CreateGeotiffFromUrlOptions {
    * The gradient color map to apply to the Cloud Optimized GeoTIFF (COG).
    * This defines how data values are translated into colors, refer to type `CogGradientColorMap`.
    */
-  gradient?: CogGradientColorMap;
+  colorMap?: CogGradientColorMap;
 }
 
 function convertRGBToRGBA(raw: Uint8Array): Uint8Array {
@@ -185,7 +185,7 @@ interface GeoTiffTileSetModelOptions extends RasterTileSetModelConstructorOption
   format?: PixelFormat;
   bands?: number[];
   bandMapping?: BandMapping;
-  gradient?: CogGradientColorMap;
+  colorMap?: CogGradientColorMap;
 }
 
 /**
@@ -298,7 +298,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       gray: 0,
       rgb: false
     };
-    this.gradient = options.gradient ? options.gradient : GrayscaleGradient;
+    this.gradient = options.colorMap ? options.colorMap : GrayscaleGradient;
     this._transformation = TransformToGradientColorMap(createGradientColorMap(this.gradient));
   }
 
@@ -349,7 +349,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    * @param gradient[].color - The value of the color as a string in hex or rgb
    * @param invalidate - Set to false if you don't want to trigger a repaint
    */
-  public setNormalizedGradient(gradient: CogGradientColorMap, invalidate=true) {
+  public setColorMap(gradient: CogGradientColorMap, invalidate=true) {
     if (gradient) {
       this.gradient = gradient;
       const colorMap = createGradientColorMap(this.gradient);
@@ -366,7 +366,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    * Gets the gradient
    * @returns the currently used normalized `gradient`.
    */
-  private getNormalizedGradient() {
+  public getColorMap() {
     return this.gradient;
   }
 
@@ -742,7 +742,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       images,
       maskImages,
       nodata: options.nodata,
-      gradient: options.gradient,
+      colorMap: options.colorMap,
       bandMapping: options.bandMapping,
     };
     return new GeoTiffTileSetModel(modelOptions);
