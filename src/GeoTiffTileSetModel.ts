@@ -623,7 +623,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     geoTiffFile.cache = true;
     const mostDetailedImage = await geoTiffFile.getImage(0);
     const info = GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile);
-    if (info.projection) {
+    if (!info.projection) {
       const crs = await getReferenceFromPrjFile(url, options);
       if (crs) info.projection === crs;
     }
