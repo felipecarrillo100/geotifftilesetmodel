@@ -107,67 +107,13 @@ export interface CreateGeotiffFromUrlOptions {
   colorMap?: CogGradientColorMap;
 }
 
-function convertRGBToRGBA(raw: Uint8Array): Uint8Array {
-  const newRaw = new Uint8Array(raw.length * 4 / 3);
-  for (let index = 0; index < raw.length / 3; index++) {
-    newRaw[index * 4] = raw[index * 3];
-    newRaw[index * 4 + 1] = raw[index * 3 + 1];
-    newRaw[index * 4 + 2] = raw[index * 3 + 2];
-    newRaw[index * 4 + 3] = 255;
-  }
-  return newRaw;
-}
 
-
-
-function stripPixelsNoData(raw: Uint8Array, nodata: number, colorMap: Uint16Array | null) {
-  // If palette image, first convert index to color.
-  const nodataColor = colorMap ? [colorMap[nodata] >> 8, colorMap[256 + nodata] >> 8, colorMap[512 + nodata] >> 8] : [nodata, nodata, nodata];
-  const equalsNodata = (r: number, g: number, b: number) => [equals(r, nodataColor[0]), equals(g, nodataColor[1]), equals(b, nodataColor[2])];
-  // If palette image, the color should match exactly.  Otherwise, any band match results in transparent.
-  const evaluate = colorMap ? (r: number, g: number, b: number) => equalsNodata(r, g, b).reduce((a, b) => a && b, true) :
-                              (r: number, g: number, b: number) => equalsNodata(r, g, b).reduce((a, b) => a || b, false);
-
-  for (let index = 0; index < raw.length / 4; index++) {
-    const invalid = evaluate(raw[index * 4], raw[index * 4 + 1], raw[index * 4 + 2]);
-    if (invalid) {
-      raw.fill(0, index * 4, index * 4 + 4);
-    }
-  }
-}
 
 interface StripResult {
   data: Uint8Array;
   pixelFormat: PixelFormat;
 }
 
-function stripPixelsByMask(data: Uint8Array, rawMaskResult: ReadRasterResult | null, pixelFormat: PixelFormat): StripResult {
-  if (!rawMaskResult) {
-    return {data, pixelFormat};
-  }
-  const rawMask = (Array.isArray(rawMaskResult) ? rawMaskResult[0] : rawMaskResult) as Uint8Array;
-
-  if (pixelFormat === PixelFormat.RGB_888) {
-    data = convertRGBToRGBA(data);
-    pixelFormat = PixelFormat.RGBA_8888;
-  }
-  const channels = 4;
-  for (let index = 0; index < rawMask.length; index++) {
-    if (rawMask[index] === 0) {
-      data.fill(0, index * channels, index * channels + channels);
-    }
-  }
-  return {data, pixelFormat};
-}
-
-function isPalette(image: GeoTIFFImage) {
-  return hasPhotometricInterpretation(image, 3);
-}
-
-
-function hasPhotometricInterpretation(image: GeoTIFFImage, photometricInterpretation: number) {
-  return image.getFileDirectory().PhotometricInterpretation === photometricInterpretation;
-}
 
 /**
  * This object is private, no need to document
@@ -248,9 +194,9 @@ export interface GeoTiffTileSetModelInfo {
   isCog: boolean;
 
   /**
-   * The projection information of the image in string format (i.e. 'EPSG:3857').
+   * The crsName is the projection of the image in string format (i.e. 'EPSG:3857').
    */
-  projection: string;
+  crsName: string;
 
   /**
    * The sampling mode used for raster data RasterSamplingMode.AREA or RasterSamplingMode.POINT
@@ -330,7 +276,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       pixelMeaning: pixelResult.meaning,
       pixelFormat: pixelResult.format,
       isCog,
-      projection: crsName,
+      crsName,
       samplingMode
     };
   }
@@ -502,12 +448,14 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
             pixelFormat =  PixelFormat.RGB_888
           }
         }
-
-        // const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
-        //     tileOffsetX, tileOffsetY, tileWidth, tileHeight,
-        //     imageWidth, imageHeight, flipY);
-        // data = stripResult.data;
-        // pixelFormat = stripResult.pixelFormat;
+        // Apply Mask
+        const stripResult = this.clipAndMaskTilePixels(
+            data, pixelFormat, rawMask, {...tile, y: tileY},
+            tileOffsetX, tileOffsetY, tileWidth, tileHeight,
+            imageWidth, imageHeight, flipY
+        );
+        data = stripResult.data;
+        pixelFormat = stripResult.pixelFormat;
 
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       }).catch(error => {
@@ -520,6 +468,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       const maskPromise = maskImage ? maskImage.readRasters({window, pool, signal: signal!}) : Promise.resolve(null);
       Promise.all([rasterPromise, maskPromise]).then(raws => {
         const rawValuesOrArray = raws[0];
+        const rawMask = raws[1];
+
         const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
 
         let raw  = (Array.isArray(rawValuesOrArray) ? rawValuesOrArray[0] : rawValuesOrArray) as ReadRasterResult;
@@ -528,7 +478,15 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
           raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
         }
         let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, transformation, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
-        const pixelFormat = PixelFormat.RGBA_8888;
+        let pixelFormat = PixelFormat.RGBA_8888;
+        // Apply Mask
+        const stripResult = this.clipAndMaskTilePixels(
+            data, pixelFormat, rawMask, {...tile, y: tileY},
+            tileOffsetX, tileOffsetY, tileWidth, tileHeight,
+            imageWidth, imageHeight, flipY
+        );
+        data = stripResult.data;
+        pixelFormat = stripResult.pixelFormat;
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       });
     }  else {
@@ -541,16 +499,20 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         let pixelFormat = pixelFormat_;
         let data = (image.getBitsPerSample() === 16) ? downscale16to8bits(raw as Uint16Array) : raw as Uint8Array;
 
-        const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
+        // Apply Mask
+        const stripResult = this.clipAndMaskTilePixels(
+            data, pixelFormat, rawMask, {...tile, y: tileY},
             tileOffsetX, tileOffsetY, tileWidth, tileHeight,
-            imageWidth, imageHeight, flipY);
+            imageWidth, imageHeight, flipY
+        );
         data = stripResult.data;
         pixelFormat = stripResult.pixelFormat;
 
+        // Remove Nodata, this applies for RGB images
         if (isNumber(nodata)) {
-          data = (pixelFormat === PixelFormat.RGB_888) ? convertRGBToRGBA(data) : data;
+          data = (pixelFormat === PixelFormat.RGB_888) ? this.convertRGBToRGBA(data) : data;
           pixelFormat = PixelFormat.RGBA_8888;
-          stripPixelsNoData(data, nodata, isPalette(image) ? image.getFileDirectory().ColorMap : null);
+          this.stripPixelsNoData(data, nodata, isPalette(image) ? image.getFileDirectory().ColorMap : null);
         }
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
       }).catch(error => {
@@ -559,47 +521,136 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       });
     }
   }
+
+  private convertRGBToRGBA(rgbData: Uint8Array): Uint8Array {
+    const pixelCount = rgbData.length / 3; // Number of RGB pixels
+    const rgbaData = new Uint8Array(pixelCount * 4); // Allocate space for RGBA pixels
+    for (let index = 0; index < pixelCount; index++) {
+      rgbaData[index * 4] = rgbData[index * 3];       // R
+      rgbaData[index * 4 + 1] = rgbData[index * 3 + 1]; // G
+      rgbaData[index * 4 + 2] = rgbData[index * 3 + 2]; // B
+      rgbaData[index * 4 + 3] = 255;                 // A (fully opaque)
+    }
+    return rgbaData;
+  }
+
+  private stripPixelsNoData(raw: Uint8Array, nodata: number, colorMap: Uint16Array | null) {
+    // Precompute nodataColor to avoid recalculating repeatedly
+    const nodataColor = colorMap
+        ? [colorMap[nodata] >> 8, colorMap[256 + nodata] >> 8, colorMap[512 + nodata] >> 8]
+        : [nodata, nodata, nodata];
+
+    // Define the evaluation function based on whether a colorMap is provided
+    const evaluate = colorMap
+        ? (r: number, g: number, b: number) => r === nodataColor[0] && g === nodataColor[1] && b === nodataColor[2]
+        : (r: number, g: number, b: number) => r === nodataColor[0] || g === nodataColor[1] || b === nodataColor[2];
+
+    // Process pixels in the raw data
+    const pixelCount = raw.length / 4; // Number of RGBA pixels
+    for (let index = 0; index < pixelCount; index++) {
+      const r = raw[index * 4];
+      const g = raw[index * 4 + 1];
+      const b = raw[index * 4 + 2];
+      if (evaluate(r, g, b)) {
+        raw.fill(0, index * 4, index * 4 + 4); // Set RGBA to transparent
+      }
+    }
+  }
+
   // @ts:ignore
   getImage(_tile: TileCoordinate, _onSuccess: (tile: TileCoordinate, image: HTMLImageElement) => void, _onError: (tile: TileCoordinate, error?: any) => void,
            _signal: AbortSignal | null): void {
     throw "Unused";
   }
 
-  private stripPixels(data: Uint8Array, pixelFormat: PixelFormat, rawMask: ReadRasterResult | null,
-                      tile: TileCoordinate, tileOffsetX: number, tileOffsetY: number,
-                      tileWidth: number, tileHeight: number, imageWidth: number, imageHeight: number,
-                      flipY: boolean): StripResult {
-    const maskStripResult = stripPixelsByMask(data, rawMask, pixelFormat);
-    data = maskStripResult.data;
-    pixelFormat = maskStripResult.pixelFormat;
-
+  private clipAndMaskTilePixels(
+      data: Uint8Array,
+      pixelFormat: PixelFormat,
+      rawMask: ReadRasterResult | null,
+      tile: TileCoordinate,
+      tileOffsetX: number,
+      tileOffsetY: number,
+      tileWidth: number,
+      tileHeight: number,
+      imageWidth: number,
+      imageHeight: number,
+      flipY: boolean
+  ): StripResult {
+    const { data: maskedData, pixelFormat: updatedPixelFormat } = this.stripPixelsByMask(data, rawMask, pixelFormat);
     return this.stripPixelsOutsideImageArea(
-        data, pixelFormat, tile,
-        tileOffsetX, tileOffsetY, tileWidth, tileHeight,
-        imageWidth, imageHeight, flipY);
+        maskedData,
+        updatedPixelFormat,
+        tile,
+        tileOffsetX,
+        tileOffsetY,
+        tileWidth,
+        tileHeight,
+        imageWidth,
+        imageHeight,
+        flipY
+    );
   }
 
-  private stripPixelsOutsideImageArea(data: Uint8Array, pixelFormat: PixelFormat,
-                                      tile: TileCoordinate, tileOffsetX: number, tileOffsetY: number,
-                                      tileWidth: number, tileHeight: number, imageWidth: number, imageHeight: number,
-                                      flipY: boolean): StripResult {
-    if (tile.x === (this.getTileColumnCount(tile.level)! - 1) || (tile.y === (this.getTileRowCount(tile.level)! - 1))) {
+  private stripPixelsByMask(
+      data: Uint8Array,
+      rawMaskResult: ReadRasterResult | null,
+      pixelFormat: PixelFormat
+  ): StripResult {
+    if (!rawMaskResult) {
+      return { data, pixelFormat };
+    }
+
+    const rawMask = (Array.isArray(rawMaskResult) ? rawMaskResult[0] : rawMaskResult) as Uint8Array;
+
+    if (pixelFormat === PixelFormat.RGB_888) {
+      data = this.convertRGBToRGBA(data);
+      pixelFormat = PixelFormat.RGBA_8888;
+    }
+
+    const channels = 4; // Assumes RGBA format
+    for (let index = 0; index < rawMask.length; index++) {
+      if (rawMask[index] === 0) {
+        data.fill(0, index * channels, index * channels + channels);
+      }
+    }
+
+    return { data, pixelFormat };
+  }
+
+  private stripPixelsOutsideImageArea(
+      data: Uint8Array,
+      pixelFormat: PixelFormat,
+      tile: TileCoordinate,
+      tileOffsetX: number,
+      tileOffsetY: number,
+      tileWidth: number,
+      tileHeight: number,
+      imageWidth: number,
+      imageHeight: number,
+      flipY: boolean
+  ): StripResult {
+    const isLastTileInRow = tile.x === this.getTileColumnCount(tile.level)! - 1;
+    const isLastTileInColumn = tile.y === this.getTileRowCount(tile.level)! - 1;
+
+    if (isLastTileInRow || isLastTileInColumn) {
       if (pixelFormat === PixelFormat.RGB_888) {
-        data = convertRGBToRGBA(data);
+        data = this.convertRGBToRGBA(data);
         pixelFormat = PixelFormat.RGBA_8888;
       }
 
+      const channels = 4; // Assumes RGBA format
       for (let py = 0; py < tileHeight; py++) {
         for (let px = 0; px < tileWidth; px++) {
-          const index = (py * tileWidth) + px;
-          const invalid = ((tileOffsetX + px) >= imageWidth) || (flipY ? ((tileOffsetY + py) < 0) : ((tileOffsetY + py) >= imageHeight));
-          if (invalid) {
-            data.fill(0, index * 4, index * 4 + 4);
+          const index = (py * tileWidth + px) * channels;
+          const isOutsideImage = (tileOffsetX + px >= imageWidth) || (flipY ? (tileOffsetY + py < 0) : (tileOffsetY + py >= imageHeight));
+          if (isOutsideImage) {
+            data.fill(0, index, index + channels);
           }
         }
       }
     }
-    return {data, pixelFormat};
+
+    return { data, pixelFormat };
   }
 
   /**
@@ -623,9 +674,9 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     geoTiffFile.cache = true;
     const mostDetailedImage = await geoTiffFile.getImage(0);
     const info = GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile);
-    if (!info.projection) {
+    if (!info.crsName) {
       const crs = await getReferenceFromPrjFile(url, options);
-      if (crs) info.projection === crs;
+      if (crs) info.crsName === crs;
     }
     return info;
   }
@@ -785,4 +836,8 @@ function isNumber(value: any, canBeNaN: boolean = true): value is number {
 
 function equals(a: number, b: number): boolean {
   return a === b || (isNaN(a) && isNaN(b));
+}
+
+function isPalette(image: GeoTIFFImage): boolean {
+  return image.getFileDirectory().PhotometricInterpretation === 3;
 }
