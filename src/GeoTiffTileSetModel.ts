@@ -539,7 +539,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         const raw = raws[0];
         const rawMask = raws[1];
         let pixelFormat = pixelFormat_;
-        let data = (image.getBitsPerSample() == 16) ? downscale16to8bits(raw as Uint16Array) : raw as Uint8Array;
+        let data = (image.getBitsPerSample() === 16) ? downscale16to8bits(raw as Uint16Array) : raw as Uint8Array;
 
         const stripResult = this.stripPixels(data, pixelFormat, rawMask, {...tile, y: tileY},
             tileOffsetX, tileOffsetY, tileWidth, tileHeight,
