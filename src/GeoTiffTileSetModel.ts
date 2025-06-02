@@ -19,11 +19,7 @@ import {ModelDescriptor} from "@luciad/ria/model/ModelDescriptor";
 import {RetiledGeoTIFFImage} from "./RetiledGeoTIFFImage";
 import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedArray} from "./utils";
 import {CogGradientColorMap, PixelMeaningEnum} from "./interfaces";
-import {
-  convert32FloatTo8BitRGB,
-  convertSingleBandTo8BitRGB,
-  downscale16to8bits
-} from "./bitstorgb";
+import {convert32FloatTo8BitRGB, convertSingleBandTo8BitRGB, downscale16to8bits} from "./bitstorgb";
 import {GrayscaleGradient, GrayScaleTransformation, TransformToGradientColorMap} from "./gradients";
 import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
 import {getReferenceFromPrjFile} from "./fileutils";
@@ -387,7 +383,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const window = [tileOffsetX, tileOffsetY, tileOffsetX + tileWidth, tileOffsetY + tileHeight];
     const nodata = typeof this._nodata !== "undefined" ? this._nodata : image.getGDALNoData();
 
-    if (this.dataType === RasterDataType.ELEVATION ) {
+    if (this.dataType === RasterDataType.ELEVATION && this._bandsNumber === 1) {
       if (this._pixelFormat === PixelFormat.FLOAT_32 || this._pixelFormat === PixelFormat.UINT_32) {
         const pixelFormat = this._pixelFormat || PixelFormat.FLOAT_32;
         image.readRasters({ window, pool, signal })
@@ -439,14 +435,16 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         let data: Uint8Array;
         const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
         if (image.getBitsPerSample() == 32 && this._pixelFormat === PixelFormat.FLOAT_32) {
+          //  Handle float 32 bits
           data = convert32FloatTo8BitRGB(raw as Float32Array, bands.length, nodata, transformation); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         } else {
+          //  Handle integer 8, 16 and 32 bits
           data = convertSingleBandTo8BitRGB(raw, {bits:image.getBitsPerSample(), samplesPerPixel: 1, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
-          if (isNumber(nodata)) {
-            pixelFormat =  PixelFormat.RGBA_8888
-          } else {
-            pixelFormat =  PixelFormat.RGB_888
-          }
+        }
+        if (isNumber(nodata)) {
+          pixelFormat =  PixelFormat.RGBA_8888
+        } else {
+          pixelFormat =  PixelFormat.RGB_888
         }
         // Apply Mask
         const stripResult = this.clipAndMaskTilePixels(
@@ -666,11 +664,18 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    * @throws Will throw an error if the URL is invalid or the GeoTIFF information cannot be retrieved.
    */
   static async infoFromURL(url: string, options: GetInfoGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModelInfo> {
-    const geoTiffFile = await fromUrl(url, {
-      allowFullFile: true,
-      headers: options.requestHeaders,
-      credentials: options.credentials ? "same-origin" : "omit"
-    });
+    let geoTiffFile;
+    try {
+      geoTiffFile = await fromUrl(url, {
+        allowFullFile: true,
+        headers: options.requestHeaders,
+        credentials: options.credentials ? "same-origin" : "omit"
+      });
+    }  catch (e) {
+      const error = new Error(`Error loading GeoTIFF file from URL: ${url}`) as any;
+      error.cause = "ERROR_LOADING_FILE";
+      throw error;
+    }
     geoTiffFile.cache = true;
     const mostDetailedImage = await geoTiffFile.getImage(0);
     const info = GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile);
