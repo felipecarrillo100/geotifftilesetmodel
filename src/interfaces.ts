@@ -34,3 +34,11 @@ export interface GradientColorMapStep {
  * Each color stop is defined by the `GradientColorMapStep` interface.
  */
 export type CogGradientColorMap = GradientColorMapStep[];
+
+export interface CogGradient {
+    colorMap: CogGradientColorMap;
+    range?: {
+        min: number;
+        max: number;
+    }
+}

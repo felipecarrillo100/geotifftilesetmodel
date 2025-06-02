@@ -20,7 +20,11 @@ interface ConvertTo8BitRGBOptions {
     convert?: (x:number) => number,
     samplesPerPixel?: number,
     transformation?: (x: number) => [number, number, number],
-    nodata?: number
+    nodata?: number;
+    nativeRange?: {
+        min: number;
+        max: number;
+    }
 }
 
 
@@ -29,15 +33,11 @@ interface ConvertTo8BitRGBOptions {
  */
 export function convertSingleBandTo8BitRGB(raw: ReadRasterResult, options: ConvertTo8BitRGBOptions): Uint8Array {
     let  divider = 1;
-    switch (options.bits) {
-        case 16:
-            divider = 256;  // 2^8
-            break;
-        case 32:
-            divider = 16777216;   // 2^24
-            break;
-    }
-    return convertTo8BitRGB(raw as Uint8Array | Uint16Array | Uint32Array, { ...options, convert:(x: number) => x/divider});
+    const range = options.nativeRange;
+
+    const convert = (x: number) => (x - range.min) / (range.max - range.min);
+
+    return convertTo8BitRGB(raw as Uint8Array | Uint16Array | Uint32Array, { ...options, convert});
 }
 
 /**
@@ -48,7 +48,7 @@ export function convertTo8BitRGB( oldRaw: Uint8Array | Uint16Array | Uint32Array
     const newRaw =  new Uint8Array(oldRaw.length * bands);
     //
     for (let index = 0; index < oldRaw.length; index++) {
-        const normalizedValue = options.convert(oldRaw[index]) / 255; // Standardize Gradient from 0 to 1
+        const normalizedValue = options.convert(oldRaw[index]); // Standardize Gradient from 0 to 1
         const rgb = options.transformation ? options.transformation(normalizedValue) : GrayScaleTransformation(normalizedValue);
         for (let j = 0; j < bands; j++) {
             if (j<3) {

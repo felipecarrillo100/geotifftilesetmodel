@@ -18,7 +18,7 @@ import type {HttpRequestHeaders, HttpRequestParameters} from "@luciad/ria/util/H
 import {ModelDescriptor} from "@luciad/ria/model/ModelDescriptor";
 import {RetiledGeoTIFFImage} from "./RetiledGeoTIFFImage";
 import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedArray} from "./utils";
-import {CogGradientColorMap, PixelMeaningEnum} from "./interfaces";
+import {CogGradient, CogGradientColorMap, PixelMeaningEnum} from "./interfaces";
 import {convert32FloatTo8BitRGB, convertSingleBandTo8BitRGB, downscale16to8bits} from "./bitstorgb";
 import {GrayscaleGradient, GrayScaleTransformation, TransformToGradientColorMap} from "./gradients";
 import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
@@ -100,7 +100,7 @@ export interface CreateGeotiffFromUrlOptions {
    * The gradient color map to apply to the Cloud Optimized GeoTIFF (COG).
    * This defines how data values are translated into colors, refer to type `CogGradientColorMap`.
    */
-  colorMap?: CogGradientColorMap;
+  gradient?: CogGradient;
 }
 
 
@@ -127,7 +127,7 @@ interface GeoTiffTileSetModelOptions extends RasterTileSetModelConstructorOption
   format?: PixelFormat;
   bands?: number[];
   bandMapping?: BandMapping;
-  colorMap?: CogGradientColorMap;
+  gradient?: CogGradient;
 }
 
 /**
@@ -211,7 +211,9 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   private _bandsNumber: number;
   private _pixelFormatMeaning: PixelMeaningEnum;
   private bandMapping: BandMapping;
-  private gradient: CogGradientColorMap;
+  private colorMap: CogGradientColorMap;
+  private nativeRange: { min: number; max: number };
+  private _bitsPerSample: number;
 
   /**
    * The constructor is private, don't call it directly, instead, use method: GeoTiffTileSetModel.createFromURL
@@ -233,6 +235,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       source: "Open Geospatial Consortium (OGC) "
     } as ModelDescriptor;
     this._bandsNumber =  images[0].getSamplesPerPixel();
+    this._bitsPerSample = images[0].getBitsPerSample();
+
     this.bandMapping = options.bandMapping ? options.bandMapping : {
       red: 0,
       green: 0,
@@ -240,8 +244,11 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       gray: 0,
       rgb: false
     };
-    this.gradient = options.colorMap ? options.colorMap : GrayscaleGradient;
-    this._transformation = TransformToGradientColorMap(createGradientColorMap(this.gradient));
+    this.colorMap = options.gradient && options.gradient.colorMap ? options.gradient.colorMap : GrayscaleGradient;
+    this.nativeRange = options.gradient && options.gradient.range ?
+        options.gradient.range :
+        {min: 0, max: Math.pow(2, this._bitsPerSample) - 1};
+    this._transformation = TransformToGradientColorMap(createGradientColorMap(this.colorMap));
   }
 
   private static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
@@ -291,25 +298,30 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    * @param gradient[].color - The value of the color as a string in hex or rgb
    * @param invalidate - Set to false if you don't want to trigger a repaint
    */
-  public setColorMap(gradient: CogGradientColorMap, invalidate=true) {
+  public setGradient(gradient: CogGradient, invalidate=true) {
     if (gradient) {
-      this.gradient = gradient;
-      const colorMap = createGradientColorMap(this.gradient);
+      this.colorMap = gradient.colorMap;
+      const colorMap = createGradientColorMap(this.colorMap);
       this._transformation = TransformToGradientColorMap(colorMap);
+      this.nativeRange = gradient.range ? gradient.range : this.nativeRange;
     } else {
-      this.gradient = GrayscaleGradient;
-      const colorMap = createGradientColorMap(this.gradient);
+      this.colorMap = GrayscaleGradient;
+      this.nativeRange = {min: 0, max: Math.pow(2, this._bitsPerSample)};
+      const colorMap = createGradientColorMap(this.colorMap);
       this._transformation = TransformToGradientColorMap(colorMap);
     }
     if (invalidate) this.invalidate();
   }
 
   /**
-   * Gets the gradient
+   * Gets the gradient of type `CogGradient`
    * @returns the currently used normalized `gradient`.
    */
-  public getColorMap() {
-    return this.gradient;
+  public getGradient(): CogGradient {
+    return {
+      colorMap: this.colorMap,
+      range: this.nativeRange
+    };
   }
 
   /**
@@ -433,13 +445,13 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
 
         let pixelFormat = pixelFormatBandUndefined;
         let data: Uint8Array;
-        const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
-        if (image.getBitsPerSample() == 32 && this._pixelFormat === PixelFormat.FLOAT_32) {
+        const transformation = this._transformation;
+        if (this._bitsPerSample === 32 && this._pixelFormat === PixelFormat.FLOAT_32) {
           //  Handle float 32 bits
           data = convert32FloatTo8BitRGB(raw as Float32Array, bands.length, nodata, transformation); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         } else {
           //  Handle integer 8, 16 and 32 bits
-          data = convertSingleBandTo8BitRGB(raw, {bits:image.getBitsPerSample(), samplesPerPixel: 1, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
+          data = convertSingleBandTo8BitRGB(raw, {bits:this._bitsPerSample, nativeRange: this.nativeRange, samplesPerPixel: 1, transformation, nodata}); //  Takes care of bit conversion and 1 band to 3 bands conversion.
         }
         if (isNumber(nodata)) {
           pixelFormat =  PixelFormat.RGBA_8888
@@ -475,7 +487,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         if (raw.length < (tileWidth * tileHeight)) {
           raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
         }
-        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), bands: this._bandsNumber, transformation, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), nativeRange: this.nativeRange, bands: this._bandsNumber, transformation, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         let pixelFormat = PixelFormat.RGBA_8888;
         // Apply Mask
         const stripResult = this.clipAndMaskTilePixels(
@@ -798,7 +810,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       images,
       maskImages,
       nodata: options.nodata,
-      colorMap: options.colorMap,
+      gradient: options.gradient,
       bandMapping: options.bandMapping,
     };
     return new GeoTiffTileSetModel(modelOptions);

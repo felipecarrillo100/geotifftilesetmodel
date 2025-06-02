@@ -44,12 +44,17 @@ interface ConvertBandsTo8BitRGBOptions {
     nodata: number;
     convert?: (x:number) => number;
     transformation?: (x: number) => [number, number, number],
+    nativeRange?: {
+        min: number;
+        max: number;
+    }
 }
 
 /**
  * Conversion Multiband -> 3 bands conversion.
  */
 export function convertBandsTo8BitRGB(raw: ReadRasterResult, options: ConvertBandsTo8BitRGBOptions): Uint8Array {
+    const range = options.nativeRange;
     let  divider = 1;
     switch (options.bits) {
         case 16:
@@ -59,7 +64,11 @@ export function convertBandsTo8BitRGB(raw: ReadRasterResult, options: ConvertBan
             divider = 16777216;  // 2^24
             break;
     }
-    return convertStandardizedBandsTo8BitRGB(raw as any,  { ...options, convert:(x: number) => x/(divider)});
+    let convert = (x: number) => x/(divider)
+    if (!options.bandMapping.rgb) {
+        convert = (x: number) => (x - range.min) / (range.max - range.min);
+    }
+    return convertStandardizedBandsTo8BitRGB(raw as any,  { ...options, convert});
 }
 
 function convertStandardizedBandsTo8BitRGB( raw: Uint8Array | Uint16Array | Uint32Array, options: ConvertBandsTo8BitRGBOptions): Uint8Array {
@@ -112,7 +121,7 @@ function bandMapping(multibands, options: ConvertBandsTo8BitRGBOptions) {
         const gray = rawData[bandMapping.gray];
         const alpha = gray === nodata ? 0 : 255;
         const rgbTransformation = options.transformation ? options.transformation : GrayScaleTransformation;
-        const x = onUndefinedConvert(gray)/255;
+        const x = onUndefinedConvert(gray);
         const rgb = rgbTransformation(x);
         return [rgb[0],rgb[1],rgb[2],alpha];
     }
