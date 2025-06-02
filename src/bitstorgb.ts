@@ -29,10 +29,38 @@ interface ConvertTo8BitRGBOptions {
 
 
 /**
- * Conversion but also Grayscale8 -> 3 bands conversion.
+ * Converts single-band raster data into an 8-bit RGB image.
+ * This function also supports grayscale-to-RGB conversion by mapping single-band pixel values
+ * to three bands (Red, Green, and Blue) using a specified native range for normalization.
+ *
+ * @param {ArrayBuffer | Uint8Array | Uint16Array | Uint32Array} raw - The input raster data to be converted.
+ *                                 It should be a single-band raster represented as a Uint8Array, Uint16Array, or Uint32Array.
+ * @param {Object} options - Configuration options for the conversion.
+ * @param {number} options.bits - The number of bits per sample in the input data.
+ * @param {Function} [options.convert] - A function to normalize input values to the range [0, 1].
+ * @param {number} [options.samplesPerPixel] - The number of samples per pixel (e.g., 1 for grayscale).
+ * @param {Function} [options.transformation] - A function to transform normalized values to RGB.
+ * @param {number} [options.nodata] - A value representing "no data" in the input raster.
+ * @param {Object} [options.nativeRange] - The native range of the raster data.
+ * @param {number} options.nativeRange.min - The minimum value of the native range.
+ * @param {number} options.nativeRange.max - The maximum value of the native range.
+ * @returns {Uint8Array} - The resulting 8-bit RGB image data, where each pixel is represented by three consecutive values (Red, Green, and Blue).
+ *
+ * @example
+ * const rawRasterData = new Uint16Array([0, 32768, 65535]); // Example single-band raster data
+ * const options = {
+ *     bits: 16,
+ *     nativeRange: {
+ *         min: 0,
+ *         max: 65535
+ *     }
+ * };
+ * const rgbData = convertSingleBandTo8BitRGB(rawRasterData, options);
+ * console.log(rgbData);
+ * // Output: Uint8Array([0, 0, 0, 128, 128, 128, 255, 255, 255])
+ * // Explanation: Pixel values are normalized and converted to RGB
  */
 export function convertSingleBandTo8BitRGB(raw: ReadRasterResult, options: ConvertTo8BitRGBOptions): Uint8Array {
-    let  divider = 1;
     const range = options.nativeRange;
 
     const convert = (x: number) => (x - range.min) / (range.max - range.min);

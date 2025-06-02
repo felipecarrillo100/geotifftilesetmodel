@@ -96,9 +96,33 @@ export interface CreateGeotiffFromUrlOptions {
    */
   bandMapping?: BandMapping;
 
-  /**
+   /**
    * The gradient color map to apply to the Cloud Optimized GeoTIFF (COG).
-   * This defines how data values are translated into colors, refer to type `CogGradientColorMap`.
+   *
+   * This property defines how data values in the COG are mapped to colors using a gradient.
+   * The gradient is specified using the `CogGradient` type, which includes:
+   * - `colorMap`: An array of color stops (`CogGradientColorMap`) that define the gradient. Each stop specifies:
+   *    - A `level` (normalized between 0.0 and 1.0) representing the position in the gradient.
+   *    - A `color` (in hex format, e.g., "#ff0000" for red) to assign at that level.
+   * - `range` (optional): Specifies the minimum and maximum values of the data range to which the gradient is applied.
+   *    - If `range` is omitted, the gradient will be applied across the full range of data values in the COG.
+   *
+   * This gradient is used to visually represent the data in the COG, such as elevation, temperature, or other measurements,
+   * by mapping numerical values to colors.
+   *
+   * @example
+   * // Example gradient for mapping elevation data
+   * const gradient = {
+   *   colorMap: [
+   *     { level: 0.0, color: "#0000ff" }, // Blue at the lowest value
+   *     { level: 0.5, color: "#00ff00" }, // Green at the midpoint
+   *     { level: 1.0, color: "#ff0000" }  // Red at the highest value
+   *   ],
+   *   range: {
+   *     min: 0,    // Minimum elevation
+   *     max: 1000  // Maximum elevation
+   *   }
+   * };
    */
   gradient?: CogGradient;
 }
@@ -292,11 +316,41 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   }
 
   /**
-   * Sets the gradient array.
-   * @param gradient - The normalized gradient array
-   * @param gradient[].level - The first level must be 0, while last level must be one. Level is an ascending value.
-   * @param gradient[].color - The value of the color as a string in hex or rgb
-   * @param invalidate - Set to false if you don't want to trigger a repaint
+   * Sets the gradient for the color map.
+   *
+   * This method updates the gradient array, which defines how data values are mapped to colors.
+   * The provided gradient must include a valid `CogGradient` object with a `colorMap` array and an optional `range`.
+   * If no gradient is provided, a default grayscale gradient will be used.
+   *
+   * @param gradient - The gradient definition to apply.
+   *   - `gradient.colorMap` (required): An array of color stops that define the gradient.
+   *     - `gradient.colorMap[].level` (number): A normalized value between 0.0 and 1.0.
+   *       - The first level must be `0.0`, and the last level must be `1.0`.
+   *       - Levels must be in ascending order.
+   *     - `gradient.colorMap[].color` (string): The color associated with the level, specified as a hex string (e.g., `"#ff0000"`) or an RGB string (e.g., `"rgb(255,0,0)"`).
+   *   - `gradient.range` (optional): Specifies the minimum and maximum values of the data range to which the gradient applies.
+   *     - If not provided, the current `nativeRange` is preserved.
+   * @param invalidate - A boolean flag indicating whether to trigger a repaint after updating the gradient.
+   *   - Set to `false` to prevent triggering a repaint. Defaults to `true`.
+   *
+   * @example
+   * // Example: Setting a custom gradient
+   * const gradient = {
+   *   colorMap: [
+   *     { level: 0.0, color: "#0000ff" }, // Blue at the lowest value
+   *     { level: 0.5, color: "#00ff00" }, // Green at the midpoint
+   *     { level: 1.0, color: "#ff0000" }  // Red at the highest value
+   *   ],
+   *   range: {
+   *     min: 0,    // Minimum value
+   *     max: 1000  // Maximum value
+   *   }
+   * };
+   * setGradient(gradient);
+   *
+   * @example
+   * // Example: Resetting to the default grayscale gradient and skipping repaint
+   * setGradient(null, false);
    */
   public setGradient(gradient: CogGradient, invalidate=true) {
     if (gradient) {
@@ -314,8 +368,22 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   }
 
   /**
-   * Gets the gradient of type `CogGradient`
-   * @returns the currently used normalized `gradient`.
+   * Retrieves the currently applied gradient.
+   *
+   * This method returns the gradient of type `CogGradient`, which includes:
+   * - `colorMap`: An array of color stops defining the gradient. Each stop specifies:
+   *   - `level` (number): A normalized value between 0.0 and 1.0, representing the position in the gradient.
+   *   - `color` (string): The color associated with the level, represented as a hex string (e.g., `"#ff0000"`) or an RGB string (e.g., `"rgb(255,0,0)"`).
+   * - `range`: The minimum and maximum values of the data range that the gradient applies to.
+   *   - If no custom range was set, this reflects the default range based on the data.
+   *
+   * @returns {CogGradient} The currently used normalized gradient, including the `colorMap` and `range`.
+   *
+   * @example
+   * // Example: Retrieving the current gradient
+   * const gradient = getGradient();
+   * console.log(gradient.colorMap); // Logs the array of color stops
+   * console.log(gradient.range);    // Logs the range { min: ..., max: ... }
    */
   public getGradient(): CogGradient {
     return {

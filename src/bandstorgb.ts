@@ -51,7 +51,38 @@ interface ConvertBandsTo8BitRGBOptions {
 }
 
 /**
- * Conversion Multiband -> 3 bands conversion.
+ * Converts multi-band raster data into an 8-bit RGB image.
+ * This function supports mapping specific bands to RGB channels or normalizing values
+ * based on the native range or bit depth of the input data.
+ *
+ * @param {ArrayBuffer | Uint8Array | Uint16Array | Uint32Array} raw - The input raster data to be converted.
+ * @param {Object} options - Configuration options for the conversion.
+ * @param {number} options.bits - The number of bits per sample in the input data (e.g., 8, 16, or 32).
+ * @param {number} options.bands - The number of bands in the input raster data.
+ * @param {Object} options.bandMapping - An object defining the mapping of bands to RGB channels.
+ * @param {boolean} options.bandMapping.rgb - If `true`, indicates that the input raster has bands to be mapped as RGB bands.
+ * @param {number} options.nodata - A value representing "no data" in the input raster.
+ * @param {Function} [options.convert] - A function to normalize input values to the range [0, 1].
+ * @param {Function} [options.transformation] - A function to transform normalized values to RGB.
+ * @param {Object} [options.nativeRange] - The native range of the raster data.
+ * @param {number} options.nativeRange.min - The minimum value of the native range.
+ * @param {number} options.nativeRange.max - The maximum value of the native range.
+ * @returns {Uint8Array} - The resulting 8-bit RGB image data, where each pixel is represented by three consecutive values (Red, Green, and Blue).
+ *
+ * @example
+ * const rawRasterData = new Uint16Array([0, 32768, 65535, 0, 32768, 65535, 0, 32768, 65535]); // Example multi-band raster data
+ * const options = {
+ *     bits: 16,
+ *     bands: 3,
+ *     bandMapping: { rgb: false },
+ *     nativeRange: {
+ *         min: 0,
+ *         max: 65535
+ *     }
+ * };
+ * const rgbData = convertBandsTo8BitRGB(rawRasterData, options);
+ * console.log(rgbData);
+ * // Output: Uint8Array([...]) - Normalized and converted RGB data
  */
 export function convertBandsTo8BitRGB(raw: ReadRasterResult, options: ConvertBandsTo8BitRGBOptions): Uint8Array {
     const range = options.nativeRange;
