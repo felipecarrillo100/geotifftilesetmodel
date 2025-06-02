@@ -53,10 +53,10 @@ export function convertBandsTo8BitRGB(raw: ReadRasterResult, options: ConvertBan
     let  divider = 1;
     switch (options.bits) {
         case 16:
-            divider = 255;
+            divider = 256;  // 2^8
             break;
         case 32:
-            divider = 255*255*255;
+            divider = 16777216;  // 2^24
             break;
     }
     return convertStandardizedBandsTo8BitRGB(raw as any,  { ...options, convert:(x: number) => x/(divider)});
