@@ -519,7 +519,6 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       }
     } else if (this._bandsNumber === 1) {
       const bands = [0];
-      const pixelFormatBandUndefined = this._pixelFormat || ((bands.length === 4 || isNumber(nodata)) ? PixelFormat.RGBA_8888 : PixelFormat.RGB_888);
 
       const rasterPromise = image.readRasters({window, pool, interleave: true, signal: signal!, samples: this._bands});
       // const rasterPromise = image.readRasters({samples: [0]});
