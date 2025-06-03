@@ -1,6 +1,6 @@
 {
   "name": "ria-geotiff",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Implements a RasterTilesetModel that decodes Cloud Optimized GeoTiffs from a URL",
   "files": [
     "lib/"
