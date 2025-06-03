@@ -167,12 +167,3 @@ export function convert32FloatTo8BitRGB(
 function equals(a: number, b: number): boolean {
     return a === b || (isNaN(a) && isNaN(b));
 }
-
-
-/**
- * Returns whether the given value is a number
- */
-function isNumber(value: any, canBeNaN: boolean = true): value is number {
-    return typeof value === "number" && (canBeNaN || !isNaN(value));
-}
-
