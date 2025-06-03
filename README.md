@@ -4,9 +4,9 @@
 The GeoTiffTilesetModel package provides Cloud Optimized geotiff  capabilities to a LuciadRIA Application.
 
 Implements
-* __Implements GeoTiffTileSetModel__
-* __Adds infoFromUrl methods__ 
-* __Extends RasterTilesetModel calculate tiles from a Cloud Optimized GeoTiff URL__
+* __Implements GeoTiffTileSetModel that extends from RasterTilesetModel to handle Cloud Optimized GeoTiff__
+* __Provides a methods to retrieve information from the URL__ 
+* __Provides a methods to easily create a GeoTiffTileSetModel from a url__
 
 The Main Components are:
 
@@ -55,7 +55,7 @@ GeoTiffTileSetModel.infoFromURL(url, options)
     console.error("Error retrieving GeoTIFF info:", error);
 });
 ```
-### To create a GeoTiffTileSetModel 
+### To create a GeoTiffTileSetModel from a URL 
 ```typescript
 GeoTiffTileSetModel.createFromURL(url, options)
   .then((model) => {

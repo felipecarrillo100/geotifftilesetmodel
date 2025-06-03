@@ -281,18 +281,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     this._bandsNumber =  images[0].getSamplesPerPixel();
     this._bitsPerSample = images[0].getBitsPerSample();
 
-    this.bandMapping = options.bandMapping ? options.bandMapping : {
-      red: 0,
-      green: 0,
-      blue: 0,
-      gray: 0,
-      rgb: false
-    };
-    this.colorMap = options.gradient && options.gradient.colorMap ? options.gradient.colorMap : GrayscaleGradient;
-    this.nativeRange = options.gradient && options.gradient.range ?
-        options.gradient.range :
-        {min: 0, max: Math.pow(2, this._bitsPerSample) - 1};
-    this._transformation = TransformToGradientColorMap(createGradientColorMap(this.colorMap));
+    this.setBandMapping(options.bandMapping);
+    this.setGradient(options.gradient);
   }
 
   private static getInfo(tile0: GeoTIFFImage, tiff: GeoTIFF = null): GeoTiffTileSetModelInfo {
@@ -377,14 +367,14 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
   public setGradient(gradient: CogGradient, invalidate=true) {
     if (gradient) {
       this.colorMap = gradient.colorMap;
-      const colorMap = createGradientColorMap(this.colorMap);
-      this._transformation = TransformToGradientColorMap(colorMap);
-      this.nativeRange = gradient.range ? gradient.range : this.nativeRange;
+      const gradientColorMap = createGradientColorMap(this.colorMap);
+      this.nativeRange = gradient.range ? gradient.range : {min: 0, max: Math.pow(2, this._bitsPerSample) - 1};
+      this._transformation = TransformToGradientColorMap(gradientColorMap);
     } else {
       this.colorMap = GrayscaleGradient;
-      this.nativeRange = {min: 0, max: Math.pow(2, this._bitsPerSample)};
-      const colorMap = createGradientColorMap(this.colorMap);
-      this._transformation = TransformToGradientColorMap(colorMap);
+      this.nativeRange = {min: 0, max: Math.pow(2, this._bitsPerSample) - 1};
+      const gradientColorMap = createGradientColorMap(this.colorMap);
+      this._transformation = TransformToGradientColorMap(gradientColorMap);
     }
     if (invalidate) this.invalidate();
   }
@@ -424,15 +414,29 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    *
    * @returns void
    */
-  public setBandMapping(bandMapping: BandMapping, invalidate=true) {
-    this.bandMapping = bandMapping ? bandMapping : {
+  public setBandMapping(bandMapping: BandMapping, invalidate = true): void {
+    // Validate the bandMapping object and set defaults for undefined properties
+    const defaultBandMapping = {
       gray: 0,
       red: 0,
       green: 0,
       blue: 0,
       rgb: false
     };
-    if (invalidate) this.invalidate();
+
+    // Use defaults for undefined properties
+    this.bandMapping = {
+      gray: bandMapping?.gray ?? defaultBandMapping.gray,
+      red: bandMapping?.red ?? defaultBandMapping.red,
+      green: bandMapping?.green ?? defaultBandMapping.green,
+      blue: bandMapping?.blue ?? defaultBandMapping.blue,
+      rgb: bandMapping?.rgb ?? defaultBandMapping.rgb
+    };
+
+    // Invalidate if required
+    if (invalidate) {
+      this.invalidate();
+    }
   }
 
   /**
