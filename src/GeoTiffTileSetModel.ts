@@ -21,7 +21,7 @@ import {analyzePixelFormat, detectSamplingMode, isLikelyCOG, normalizeRawTypedAr
 import {CogGradient, CogGradientColorMap, PixelMeaningEnum} from "./interfaces";
 import {convert32FloatTo8BitRGB, convertSingleBandTo8BitRGB, downscale16to8bits} from "./bitstorgb";
 import {GrayscaleGradient, GrayScaleTransformation, TransformToGradientColorMap} from "./gradients";
-import {BandMapping, convertBandsTo8BitRGB} from "./bandstorgb";
+import {BandMapping, convertBandsTo8BitRGB, createArrow} from "./bandstorgb";
 import {getReferenceFromPrjFile} from "./fileutils";
 import {createGradientColorMap} from "@luciad/ria/util/ColorMap";
 
@@ -222,6 +222,26 @@ export interface GeoTiffTileSetModelInfo {
    * The sampling mode used for raster data RasterSamplingMode.AREA or RasterSamplingMode.POINT
    */
   samplingMode: RasterSamplingMode;
+
+  /**
+   * The sampling mode used for raster data RasterSamplingMode.AREA or RasterSamplingMode.POINT
+   */
+  tileMatrix?: {
+    zoom: number;
+    tileColumnCount: number;
+    /**
+     * The number of tile rows.
+     */
+    tileRowCount: number;
+    /**
+     * The width of each individual tile in pixels.
+     */
+    tileWidth: number;
+    /**
+     * The height of each individual tile in pixels.
+     */
+    tileHeight: number;
+  }[];
 }
 
 export class GeoTiffTileSetModel extends RasterTileSetModel {
@@ -291,6 +311,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     const geoKeys = tile0.geoKeys;
     const crsName = getReferenceFromEPSGCode(geoKeys);
     const samplingMode = detectSamplingMode(tile0);
+
+    // Return all information
     return {
       tileWidth,
       tileHeight,
@@ -304,8 +326,8 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
       pixelFormat: pixelResult.format,
       isCog,
       crsName,
-      samplingMode
-    };
+      samplingMode,
+    }
   }
 
   /**
@@ -506,12 +528,11 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         const rawValuesOrArray = raws[0];
         const rawMask = raws[1];
         let raw = (Array.isArray(rawValuesOrArray) ? rawValuesOrArray[0] : rawValuesOrArray) as ReadRasterResult;
-       // console.assert(raw.length === (tileWidth * tileHeight * bands.length));
-        if (raw.length < (tileWidth * tileHeight)) {
-          raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata);
-        }
 
-        let pixelFormat = pixelFormatBandUndefined;
+        //  This is probably not needed raw.length seems always equal to tileWidth * tileHeight
+        if (raw.length < (tileWidth * tileHeight)) raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata);
+
+        let pixelFormat: PixelFormat;
         let data: Uint8Array;
         const transformation = this._transformation;
         if (this._bitsPerSample === 32 && this._pixelFormat === PixelFormat.FLOAT_32) {
@@ -551,11 +572,18 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         const transformation = this._transformation ? this._transformation : GrayScaleTransformation;
 
         let raw  = (Array.isArray(rawValuesOrArray) ? rawValuesOrArray[0] : rawValuesOrArray) as ReadRasterResult;
-        // console.assert(raw.length === (tileWidth * tileHeight * bands.length));
-        if (raw.length < (tileWidth * tileHeight)) {
-          raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
-        }
-        let data: Uint8Array = convertBandsTo8BitRGB(raw, {bits: image.getBitsPerSample(), nativeRange: this.nativeRange, bands: this._bandsNumber, transformation, bandMapping: this.bandMapping, nodata}); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
+
+        //  This is probably not needed raw.length seems always equal to tileWidth * tileHeight
+        if (raw.length < (tileWidth * tileHeight)) raw = normalizeRawTypedArray(raw, tileWidth * tileHeight, nodata) as any;
+
+        let data: Uint8Array = convertBandsTo8BitRGB(raw, {
+          bits: image.getBitsPerSample(),
+          nativeRange: this.nativeRange,
+          bands: this._bandsNumber,
+          transformation,
+          bandMapping: this.bandMapping,
+          nodata
+        }); // Takes care of bit conversion, 1 band to 3 bands conversion and the no data value.
         let pixelFormat = PixelFormat.RGBA_8888;
         // Apply Mask
         const stripResult = this.clipAndMaskTilePixels(
@@ -566,6 +594,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
         data = stripResult.data;
         pixelFormat = stripResult.pixelFormat;
         onSuccess(tile, {data: data.buffer, pixelFormat, width: tileWidth, height: tileHeight});
+
       });
     }  else {
       const pixelFormat_ = this._pixelFormat;
@@ -744,7 +773,7 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
    * @throws Will throw an error if the URL is invalid or the GeoTIFF information cannot be retrieved.
    */
   static async infoFromURL(url: string, options: GetInfoGeotiffFromUrlOptions = {}): Promise<GeoTiffTileSetModelInfo> {
-    let geoTiffFile;
+    let geoTiffFile: GeoTIFF;
     try {
       geoTiffFile = await fromUrl(url, {
         allowFullFile: true,
@@ -759,6 +788,45 @@ export class GeoTiffTileSetModel extends RasterTileSetModel {
     geoTiffFile.cache = true;
     const mostDetailedImage = await geoTiffFile.getImage(0);
     const info = GeoTiffTileSetModel.getInfo(mostDetailedImage, geoTiffFile);
+
+    // Initialize zoom level variables
+    const tileMatrix = [];
+
+    if (geoTiffFile) {
+      // Retrieve the number of images (zoom levels) in the GeoTIFF file
+      const imageCount = await geoTiffFile.getImageCount(); // Use await here
+      const images: GeoTIFFImage[] = [];
+
+      // Fetch all images asynchronously
+      for (let i = 0; i < imageCount; i++) {
+        const image = await geoTiffFile.getImage(i); // Use await here
+        images.push(image);
+      }
+
+      // Sort images by resolution (width * height) in descending order
+      images.sort((a, b) => b.getWidth() * b.getHeight() - a.getWidth() * a.getHeight());
+
+      // Build the tile matrix information for each zoom level
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i];
+        const levelTileWidth = image.getTileWidth();
+        const levelTileHeight = image.getTileHeight();
+        const levelCols = Math.ceil(image.getWidth() / levelTileWidth); // Tiles horizontally
+        const levelRows = Math.ceil(image.getHeight() / levelTileHeight); // Tiles vertically
+
+        tileMatrix.push({
+          zoom: i, // Assign sequential zoom levels starting from 0
+          tileColumnCount: levelCols, // Number of tiles horizontally
+          tileRowCount: levelRows, // Number of tiles vertically
+          tileWidth: levelTileWidth,
+          tileHeight: levelTileHeight
+        });
+      }
+    }
+
+    if (tileMatrix) {
+      info.tileMatrix = tileMatrix;
+    }
     if (!info.crsName) {
       const crs = await getReferenceFromPrjFile(url, options);
       if (crs) info.crsName === crs;

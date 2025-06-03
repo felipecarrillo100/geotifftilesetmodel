@@ -157,3 +157,121 @@ function bandMapping(multibands, options: ConvertBandsTo8BitRGBOptions) {
         return [rgb[0],rgb[1],rgb[2],alpha];
     }
 }
+
+interface CreateArrowOptions {
+    tileWidth: number;
+    tileHeight: number;
+    bits: number;
+    bands: number;
+    bandMapping: BandMapping; // The band containing the value to be used as wind
+    nodata: number;
+    convert?: (x:number) => number;
+    transformation?: (x: number) => [number, number, number],
+    nativeRange?: {
+        min: number;
+        max: number;
+    }
+}
+
+export function createArrow(raw: ReadRasterResult, options: CreateArrowOptions) {
+    const {
+        tileWidth,
+        tileHeight,
+        bands,
+        bandMapping,
+        nodata,
+        convert,
+        transformation,
+        nativeRange,
+    } = options;
+
+    // Define the grid size for the matrix of arrows
+    const gridSize = 15; // 10x10 arrows
+    const arrowSpacingX = tileWidth / gridSize; // Horizontal spacing between arrows
+    const arrowSpacingY = tileHeight / gridSize; // Vertical spacing between arrows
+
+    // Create a canvas to draw the arrows
+    const canvas = document.createElement('canvas');
+    canvas.width = tileWidth;
+    canvas.height = tileHeight;
+    const ctx = canvas.getContext('2d')!;
+
+    // Clear the canvas for a transparent background
+    ctx.clearRect(0, 0, tileWidth, tileHeight);
+
+    // Loop through the grid positions
+    for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+            // Calculate the position of the current arrow
+            const posX = Math.floor(col * arrowSpacingX + arrowSpacingX / 2);
+            const posY = Math.floor(row * arrowSpacingY + arrowSpacingY / 2);
+
+            // Convert the 2D grid position to a 1D pixel index
+            const pixelIndex = posY * tileWidth + posX;
+
+            // Calculate the index for the target band in interleaved data
+            const centerIndexU = pixelIndex * bands + bandMapping.gray;
+            const centerIndexV = pixelIndex * bands + (bandMapping.gray + 1);
+
+            // Get the wind direction value from the target band
+            let U = raw[centerIndexU] as number;
+            let V = raw[centerIndexV] as number;
+
+        // Calculate magnitude
+            const magnitude = Math.sqrt(U*U + V*V);
+
+        //# Calculate orientation in degrees
+            let windDirection = Math.atan2(V, U) * (180 / Math.PI);
+
+            // Handle nodata values
+            if (windDirection === nodata) {
+                continue; // Skip this arrow if the value is nodata
+            }
+
+            // Apply conversion function if provided
+            if (!options.bandMapping.rgb) {
+                // const convertX = (x: number) => (x - nativeRange.min) / (nativeRange.max - nativeRange.min);
+                // windDirection = convertX(windDirection);
+            }
+
+
+            // Normalize the value to a range if nativeRange is provided
+            // if (nativeRange) {
+            //     const { min, max } = nativeRange;
+            //     windDirection = (windDirection - min) / (max - min); // Normalize to 0-1
+            //     windDirection = windDirection * 360; // Scale to 0-360 degrees
+            // }
+            windDirection = V - 180;
+
+            // Debugging: Log the wind direction value
+            console.log(`Wind direction at position (${posX}, ${posY}):`, windDirection);
+
+            // Draw the arrow at the current position
+            const arrowLength = Math.min(arrowSpacingX, arrowSpacingY) / 2.5; // Arrow size relative to spacing
+            const angle = (windDirection * Math.PI) / 180; // Convert degrees to radians
+
+            ctx.save();
+            ctx.translate(posX, posY);
+            ctx.rotate(angle);
+
+            // Draw the arrow (white with black border)
+            ctx.beginPath();
+            ctx.moveTo(0, -arrowLength); // Start of the arrow (tip)
+            ctx.lineTo(-arrowLength / 4, arrowLength / 4); // Left wing
+            ctx.lineTo(arrowLength / 4, arrowLength / 4); // Right wing
+            ctx.closePath();
+            ctx.fillStyle = 'white'; // White arrow
+            ctx.strokeStyle = 'black'; // Black border
+            ctx.lineWidth = 1;
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    // Extract pixel data from the canvas
+    const imageData = ctx.getImageData(0, 0, tileWidth, tileHeight);
+    const data = new Uint8Array(imageData.data.buffer);
+
+    return data; // Return the RGBA data for the arrows
+}
