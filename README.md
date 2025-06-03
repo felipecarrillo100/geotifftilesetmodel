@@ -6,11 +6,11 @@ The GeoTiffTilesetModel package provides Cloud Optimized geotiff  capabilities t
 Implements
 * __Implements GeoTiffTileSetModel__
 * __Adds infoFromUrl methods__ 
-* __Extends RasterTilesetModel calculate tiles from a Cloud Optimized URL__
+* __Extends RasterTilesetModel calculate tiles from a Cloud Optimized GeoTiff URL__
 
 The Main Components are:
 
-* __GeoTiffTileSetModel__: a ready to use LuciadRIA RasterTilesetModel to decode Cloud Optimized  GeoTiffs
+* __GeoTiffTileSetModel__: a ready to use LuciadRIA RasterTilesetModel to decode Cloud Optimized GeoTiffs
 
 
 ## To build
@@ -36,7 +36,7 @@ Test use the sever-side implementations, use GeoServer of LuciadFusion
 Simply import the NPM package into your project
 
 ```
-npm install wfststore
+npm install ria-geotiff
 ``` 
 
 
