@@ -4,14 +4,17 @@
 The GeoTiffTilesetModel package provides Cloud Optimized geotiff  capabilities to a LuciadRIA Application.
 
 Implements
-* __Implements GeoTiffTileSetModel that extends from RasterTilesetModel to handle Cloud Optimized GeoTiff__
-* __Provides a methods to retrieve information from the URL__ 
-* __Provides a methods to easily create a GeoTiffTileSetModel from a url__
+* __Implements `GeoTiffTileSetModel` that extends from `RasterTilesetModel` to handle Cloud Optimized GeoTiffs__
+* __Provides a method `infoFromURL` to retrieve information from the URL__ 
+* __Provides a method `createFromURL` to easily create a GeoTiffTileSetModel from a URL__
 
 The Main Components are:
 
-* __GeoTiffTileSetModel__: a ready to use LuciadRIA RasterTilesetModel to decode Cloud Optimized GeoTiffs
+* __GeoTiffTileSetModel__: a ready to use LuciadRIA RasterTilesetModel to decode Cloud Optimized GeoTiffs.
 
+To use:
+
+* Simply use  __GeoTiffTileSetModel__ in combination with a __RasterTileSetLayer__ and add it to your map.
 
 ## To build
 This is the source code that produces a library delivered as a npm package. 
@@ -41,7 +44,7 @@ npm install ria-geotiff
 
 ## To use in your project
  
-### To retrieve any information available from the Geotiff 
+### To retrieve any information available from the Geotiff using `infoFromURL`
 ```typescript
 import {GeoTiffTileSetModel} from "ria-geotiff/lib/GeoTiffTileSetModel";
 
@@ -55,7 +58,10 @@ GeoTiffTileSetModel.infoFromURL(url, options)
     console.error("Error retrieving GeoTIFF info:", error);
 });
 ```
-### To create a GeoTiffTileSetModel from a URL 
+### To create a GeoTiffTileSetModel from a URL using `createFromURL`
+Call `createFromURL` to create a model from a URL. The `createFromURL` methode will retrieve any information required from the URL and automatically use it to create an instance of `GeoTiffTileSetModel`. 
+
+<strong>Note</strong>: the constructor of `GeoTiffTileSetModel` is private  and you are not supposed to use it directly. Use always `createFromURL` to create a new model.
 ```typescript
 GeoTiffTileSetModel.createFromURL(url, options)
   .then((model) => {
@@ -72,8 +78,8 @@ GeoTiffTileSetModel.createFromURL(url, options)
 ```
 
 ### Working with gradients
-- Define your normalized gradient (0 to 1 values), 
-- Define the range of values (from 0 to 8848) 
+- Define your normalized gradient (0 to 1 values for level), color to be defined as a string; 
+- Define the range min and max. In this example min, max go from 0 to 8848. 
 ```typescript
 const gradient = {
     colorMap: [
@@ -91,13 +97,7 @@ const gradient = {
     range: { min: 0, max: 8848 },
 };
 ```
-
-### Working with bands:
-You can initialize the band mapping during layer creation setting the options of `createFromURL` 
-or you can change it after layer creation usig the method model.setGradient(gradient);
-
-
-Now create the layer and pass it as part of the options:
+Now create the layer and pass `gradient` as part of the options:
 ```typescript
 GeoTiffTileSetModel.createFromURL(url, {gradient})
   .then((model) => {
@@ -107,10 +107,22 @@ GeoTiffTileSetModel.createFromURL(url, {gradient})
     console.error("Error creating GeoTIFF Tile Set Model:", error);
   });
 ```
-The layer will be created and displayed using this color map options.
 
-You can also modify the gradient after the layer has been created using:
+You can also modify the gradient after the layer has been created using `setGradient`:
+
 ```typescript
+model.setGradient(newGradient);
+```
+
+
+### Working with bands:
+You can initialize the band mapping during layer creation setting the options of `createFromURL` 
+or you can change it after layer creation usig the method model.setGradient(gradient);
+
+By passing a `bandMapping` object, the layer will be created and displayed using the band mapping options.
+
+```typescript
+//  During model creation
 GeoTiffTileSetModel.createFromURL(url, {
   bandMapping: {
     red: 0,      // n-index band to be used as red
@@ -125,6 +137,8 @@ GeoTiffTileSetModel.createFromURL(url, {
         console.error("Error creating GeoTIFF Tile Set Model:", error);
     });
 ```
+
+You can also modify the `bandMapping` after the layer has been created using `setBandMapping`:
 
 ```typescript
 model.setBandMapping({ red: 0, green: 1, blue: 2, isRGB: true });
