@@ -66,7 +66,7 @@ Call `createFromURL` to create a model from a URL. The `createFromURL` methode w
 GeoTiffTileSetModel.createFromURL(url, options)
   .then((model) => {
     console.log("GeoTIFF Tile Set Model created:", model);
-    //  use this model in combination with a 
+    //  use this model in combination with a RasterTileSetLayer
     const layer = new RasterTileSetLayer(model, options);
     // Add the layer to the map
     map.layerTree.addChild(layer);  
