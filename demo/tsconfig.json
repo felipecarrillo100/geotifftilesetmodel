@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true, "rootDir": "..", "types": ["vite/client", "node"],
+    "paths": {"ria-geotiff": ["../src/index.ts"]},
+    "module": "ESNext", "target": "ES2022"
+  },
+  "include": ["src", "vite.config.ts", "../src"]
+}

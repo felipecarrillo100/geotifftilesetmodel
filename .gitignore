@@ -2,3 +2,12 @@ node_modules/
 lib/
 .idea/
 *.tgz
+coverage/
+# LuciadRIA license for the demo: never commit it (see demo/README.md)
+demo/public/license.txt
+# Demo data downloaded or generated locally (see demo/README.md)
+demo/public/data/
+# Local tool configuration
+.claude/
+CLAUDE.md
+CLAUDE.local.md
