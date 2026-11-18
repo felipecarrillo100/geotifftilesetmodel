@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ria-geotiff demo</title>
+    <style>
+        :root { color-scheme: light dark; font: 13px/1.4 system-ui, sans-serif; }
+        html, body { margin: 0; height: 100%; }
+        #map { position: absolute; inset: 0; }
+        .card { position: absolute; z-index: 2; background: Canvas; color: CanvasText; border-radius: 8px;
+                box-shadow: 0 2px 10px #0006; padding: 10px 12px; max-height: calc(100% - 20px); overflow: auto;
+                box-sizing: border-box; }
+        .card h1, .card h2 { font-size: 13px; margin: 0 0 8px; }
+
+        /* Add data (left) */
+        #panel { top: 10px; left: 10px; width: 320px; }
+        #panel label { display: block; margin: 8px 0 3px; font-weight: 600; }
+        #panel select, #panel input[type=text] { width: 100%; box-sizing: border-box; font: inherit; }
+        #panel input[type=text] { font: 12px monospace; }
+        #panel .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        #panel .grid label { margin: 0; font-weight: normal; }
+        #panel .grid input { width: 100%; box-sizing: border-box; }
+        #panel .hint { font-size: 11px; opacity: .75; margin: 6px 0 0; }
+        #panel button.primary { margin-top: 10px; font: inherit; padding: 3px 14px; }
+        #probe, #log { font: 11px/1.35 monospace; white-space: pre-wrap; margin: 8px 0 0; }
+        #log { max-height: 160px; overflow: auto; opacity: .85; }
+        .error { color: #d33; }
+
+        /* Layers (top right overlay) */
+        #layer-panel { top: 10px; right: 10px; width: 300px; }
+        #layer-panel .note { font-size: 11px; opacity: .75; margin: 6px 0 0; }
+        .layer-row { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+        .layer-row label { display: flex; align-items: center; gap: 6px; margin: 0; min-width: 0; flex: 1; }
+        .layer-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .layer-row .kind { font-size: 10px; opacity: .6; border: 1px solid currentColor; border-radius: 3px; padding: 0 3px; }
+        .icon-button { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0;
+                       border-radius: 4px; background: transparent; color: inherit; cursor: pointer; }
+        .icon-button:hover:not(:disabled) { background: #8883; }
+        .icon-button:focus-visible { outline: 2px solid Highlight; }
+        .icon-button:disabled { opacity: .3; cursor: default; }
+        .icon-button svg { width: 16px; height: 16px; }
+
+        .credits { position: absolute; right: 6px; bottom: 4px; z-index: 2; font: 11px system-ui; color: #fff;
+                   text-shadow: 0 0 3px #000; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<section id="panel" class="card" aria-label="Add data">
+    <h1>ria-geotiff demo</h1>
+
+    <label for="source">Add</label>
+    <select id="source">
+        <option value="swisstopo">swisstopo area (streamed from swisstopo)</option>
+        <option value="elevation">Elevation COG (URL)</option>
+        <option value="imagery">Imagery COG (URL)</option>
+    </select>
+
+    <div data-source="swisstopo">
+        <label>Area in LV95 kilometres</label>
+        <div class="grid">
+            <label>East <input id="swiss-e" type="number" value="2616" step="1"></label>
+            <label>North <input id="swiss-n" type="number" value="1091" step="1"></label>
+            <label>Width <input id="swiss-w" type="number" value="10" min="1" max="20" step="1"></label>
+            <label>Height <input id="swiss-h" type="number" value="8" min="1" max="20" step="1"></label>
+        </div>
+        <p class="hint">swissALTI3D 0.5 m as one elevation layer and SWISSIMAGE 10 cm, 1 km tiles read directly from
+            data.geo.admin.ch. Default: Zermatt and the Matterhorn.</p>
+    </div>
+
+    <div data-source="elevation" hidden>
+        <label for="elevation-url">COG URL</label>
+        <input id="elevation-url" type="text" spellcheck="false">
+        <p class="hint">Single-band COG (any integer or float type), used as terrain.</p>
+    </div>
+
+    <div data-source="imagery" hidden>
+        <label for="imagery-url">COG URL</label>
+        <input id="imagery-url" type="text" spellcheck="false">
+        <p class="hint">RGB(A), JPEG/YCbCr, palette or single-band COG, draped on the terrain.</p>
+    </div>
+
+    <button id="add" class="primary" type="button">Add</button>
+
+    <div id="probe">Click the map to read the terrain height.</div>
+    <div id="log" aria-live="polite"></div>
+    <p class="hint">swissALTI3D and SWISSIMAGE © swisstopo.</p>
+</section>
+
+<section id="layer-panel" class="card" aria-label="Layers">
+    <h2>Layers</h2>
+    <div id="layers"></div>
+    <p class="note">LuciadRIA shows one elevation layer at a time: switching one on switches the others off.</p>
+</section>
+
+<div class="credits">Basemap: Esri, Maxar, Earthstar Geographics, and the GIS User Community</div>
+<script type="module" src="./src/bootstrap.ts"></script>
+</body>
+</html>
