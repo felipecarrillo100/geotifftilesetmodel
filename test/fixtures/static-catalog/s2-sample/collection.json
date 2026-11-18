@@ -1,0 +1,85 @@
+{
+  "type": "Collection",
+  "stac_version": "1.1.0",
+  "id": "s2-sample",
+  "title": "Sentinel-2-like sample",
+  "description": "Red and NIR at 10 m in UTM 33N (test fixtures).",
+  "license": "MIT",
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          14.9995,
+          45.1415,
+          15.017,
+          45.154
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2024-01-01T00:00:00Z",
+          "2025-12-31T23:59:59Z"
+        ]
+      ]
+    }
+  },
+  "summaries": {
+    "eo:cloud_cover": {
+      "minimum": 0,
+      "maximum": 100
+    },
+    "platform": [
+      "sample"
+    ]
+  },
+  "item_assets": {
+    "red": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ],
+      "title": "Red",
+      "eo:bands": [
+        {
+          "name": "B04",
+          "common_name": "red"
+        }
+      ]
+    },
+    "nir": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ],
+      "title": "NIR",
+      "eo:bands": [
+        {
+          "name": "B08",
+          "common_name": "nir"
+        }
+      ]
+    }
+  },
+  "links": [
+    {
+      "rel": "root",
+      "href": "../catalog.json"
+    },
+    {
+      "rel": "parent",
+      "href": "../catalog.json"
+    },
+    {
+      "rel": "item",
+      "href": "./a/a.json",
+      "type": "application/geo+json"
+    },
+    {
+      "rel": "item",
+      "href": "./b/b.json",
+      "type": "application/geo+json"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
-import type {GeoTIFF, GeoTIFFImage} from "geotiff";
+import type {GeoTIFFImage} from "geotiff";
 import {PixelFormat} from "@luciad/ria/model/tileset/PixelFormat.js";
 import {RasterSamplingMode} from "@luciad/ria/model/tileset/RasterSamplingMode.js";
 import {PixelMeaningEnum} from "./interfaces.js";
-import {firstIFDOffsetOf, geoKeysOf, hasTag, photometricOf, tag} from "./tiff.js";
+import {geoKeysOf, photometricOf, tag} from "./tiff.js";
 
 /** TIFF SampleFormat values. */
 const SAMPLE_FORMAT_UINT = 1;
@@ -99,18 +99,6 @@ export function analyzePixelFormat(image: GeoTIFFImage): { meaning: PixelMeaning
         }
     }
     return {meaning, format};
-}
-
-/**
- * Heuristic check for a Cloud Optimized GeoTIFF: tiled, with the first IFD at the start of the file so the
- * header and the image directories can be read with a few small range requests.
- */
-export function isLikelyCOG(image: GeoTIFFImage, tiff: GeoTIFF): boolean {
-    const isTiled = hasTag(image, "TileWidth") && hasTag(image, "TileLength");
-    // GDAL places the first IFD right after the header and its small "ghost" area; 16 KiB leaves room for other
-    // writers while still rejecting files with the directory at the end (which need a full download).
-    const firstIFDOffset = firstIFDOffsetOf(tiff);
-    return isTiled && typeof firstIFDOffset === "number" && firstIFDOffset < 16384;
 }
 
 /** Sampling mode declared by the file (`GTRasterTypeGeoKey`); AREA when absent or unreadable. */

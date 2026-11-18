@@ -1,15 +1,24 @@
 # ria-geotiff
 
-Cloud Optimized GeoTIFF (COG) support for [LuciadRIA](https://www.luciad.com/): a `RasterTileSetModel` that streams
-a COG straight from a URL with HTTP range requests, and shows it as **imagery** or uses it as **terrain**.
+Cloud Optimized GeoTIFF (COG) support for [LuciadRIA](https://www.luciad.com/): one `RasterTileSetModel`,
+`GeoTiffTileSetModel`, that streams COGs straight from where they are published with HTTP range requests, and shows
+them as **imagery** styled with band math in the browser, or uses them as **terrain**.
 
-- **Imagery**: RGB(A), JPEG/YCbCr orthophotos, palette images, 8/16/32-bit and float single-band data colored with a
-  gradient, and multiband data with a band mapping. Each image of the COG (full resolution and overviews) is one
-  level of the tile set.
-- **Elevation** (`dataType: RasterDataType.ELEVATION`): one band of any integer or float type is served as terrain,
-  in the same tile layout LuciadFusion uses for its elevation coverages (see [Elevation](#elevation)).
+- **One factory**, `GeoTiffTileSetModel.create(options)`, for one file (`url`, `file`), several files as bands or
+  as a mosaic (`inputs`), STAC items (`stac`) and manifests (`manifest`).
+- **Styles** as JSON: composites, indices from expressions (`(nir - red) / (nir + red)`), colour ramps, class tables,
+  masks, statistics-based stretches. Restyling costs no requests.
+- **Terrain** (`dataType: RasterDataType.ELEVATION`) in the tile layout LuciadFusion uses for its elevation.
+- **STAC**: `StacClient` finds collections, checks a selection and picks items, on real servers that differ a lot.
+- **One box for any URL**: `identifySource(url)` tells a COG, a manifest, a STAC item, collection, static catalog or
+  API apart with one range request (`probeCog` says whether a GeoTIFF is cloud optimized); `StacClient` also crawls
+  static catalogs.
 
 LuciadRIA is **not** included: it is a peer dependency, the application provides it.
+
+**Documentation:** the [developer guide](docs/developer-guide.md) (the five-step quick start, concepts, recipes,
+troubleshooting), the API reference site (`npm run docs`, then open `build/docs/index.html`) and the
+[manifest specification](docs/manifest.md).
 
 ## Requirements
 
@@ -25,148 +34,126 @@ npm install ria-geotiff
 ## Usage
 
 ```ts
-import {GeoTiffTileSetModel} from "ria-geotiff";
 import {RasterTileSetLayer} from "@luciad/ria/view/tileset/RasterTileSetLayer.js";
+import {GeoTiffTileSetModel} from "ria-geotiff";
 
-const model = await GeoTiffTileSetModel.createFromURL("https://example.com/orthophoto.tif");
-map.layerTree.addChild(new RasterTileSetLayer(model, {label: "Orthophoto"}));
+const map = ...;   // your LuciadRIA WebGLMap
+const url = ...;   // URL of a COG
+const model = await GeoTiffTileSetModel.create({url});   // an automatic style: true colour, or grey
+map.layerTree.addChild(new RasterTileSetLayer(model, {label: "COG"}));
 ```
 
-The file must be a COG (tiled, with its header at the start of the file) and served with HTTP range support; for
+The file should be a COG (tiled, with its header at the start of the file) served with HTTP range support; for
 cross-origin URLs the server must allow CORS (`Access-Control-Allow-Origin`, and `Range` in
-`Access-Control-Allow-Headers`). For files that are already open, such as a dropped file, use
-`createFromGeoTIFF`, which also accepts GeoTIFFs that are not COGs:
+`Access-Control-Allow-Headers`). A dropped file: `GeoTiffTileSetModel.create({file})` with the `File`, an `ArrayBuffer` or a geotiff.js
+`GeoTIFF`.
+
+### Bands and styles
 
 ```ts
-import {fromBlob} from "geotiff";
-const model = await GeoTiffTileSetModel.createFromGeoTIFF(await fromBlob(file));
+const redUrl = ..., nirUrl = ...;        // single-band COGs
+const model = await GeoTiffTileSetModel.create({
+  inputs: [{url: redUrl, bands: "red"}, {url: nirUrl, bands: "nir"}],
+  style: {render: {type: "pseudocolor", expression: "(nir - red) / (nir + red)", stretch: [-0.2, 0.9],
+           colorMap: ramp("rdylgn")}},   // ramp from "ria-geotiff/ramps" (optional ready-made data)
+});
+map.layerTree.addChild(new RasterTileSetLayer(model, {label: "NDVI"}));
+await model.setStyle({render: {type: "rgb", red: "nir", green: "red", blue: "red"}});   // no new requests
 ```
 
-### Elevation
+- Band names are set once: per input (`bands: ["red", "green", "blue", "nir"]`), or by 1-based location
+  (`bands: {red: "f1_b3", nir: "f2_b1"}`). Without names: GDAL band descriptions, else `b1`…`bN`.
+- Renders: `rgb`, `pseudocolor` (`band` or `expression` through a ramp or class table), `custom` (your own paint).
+- Stretches: `[min, max]`, `{type: "percentile", low, high}` (default 2–98), `{type: "stddev", n}`, `{type: "minmax"}`.
+- Masks: `{band, values}`, `{band, bits}`, `{band, range}`, `{expression}`, with `invert`.
+- Expressions are parsed by a fixed grammar, never evaluated as JavaScript: user-typed expressions are safe.
+- `withStyle(style)` makes a twin with another style sharing files and caches (swipe comparisons).
+
+### Terrain and mosaics
+
+One DEM file as terrain:
 
 ```ts
 import {RasterDataType} from "@luciad/ria/model/tileset/RasterDataType.js";
 
-const terrain = await GeoTiffTileSetModel.createFromURL("https://example.com/dem.tif", {
-    dataType: RasterDataType.ELEVATION,
-});
+const demUrl = ...;                      // URL of a single-band DEM
+const terrain = await GeoTiffTileSetModel.create({url: demUrl, dataType: RasterDataType.ELEVATION});
 map.layerTree.addChild(new RasterTileSetLayer(terrain, {label: "Terrain"}));
 ```
 
-Elevation tiles are delivered to LuciadRIA exactly as LuciadFusion delivers its elevation (LTS) tiles:
-
-- a quadtree with **64 x 64 samples** per tile (`elevation.tileSize`);
-- **point sampling**: the samples of a tile span its bounds edge to edge, so neighbouring tiles share the samples on
-  their common edge and the terrain has no seams;
-- encoded as LuciadFusion's **LuciadElev0 PNG**: 16-bit grayscale plus a private `biNy` chunk with the offset `p`
-  and range `q`, `height = p + v * (q - p) / 65535`, 0.4 m steps, `v = 0` = no data. This is the format LuciadRIA's
-  terrain decodes natively (raw `FLOAT_32` tile data is not accepted by its WebGL terrain painter).
-
-The heights are interpolated (bilinear, nodata aware) from the most suitable image of the COG, so the COG itself can
-use any tile size, data type (Int16, UInt16, Int32, Float32, Float64...) and overview layout. GDAL scale/offset
-metadata is applied. LuciadRIA treats the heights as metres above the geoid.
-
-| Option                    | Default | Meaning                                                                    |
-|---------------------------|---------|----------------------------------------------------------------------------|
-| `elevation.tileSize`      | 64      | Samples along each side of a tile.                                          |
-| `elevation.band`          | 0       | Band holding the heights.                                                   |
-| `elevation.noDataHeight`  | none    | Height used where the file has no data. By default missing data is sent as LuciadFusion's nodata marker, and LuciadRIA shows the elevation of the layers below it there (for example a world elevation layer). |
-| `nodata`                  | file's GDAL_NODATA | Value that marks missing data.                                   |
-
-**One elevation layer only.** LuciadRIA shows a single elevation layer at a time: it hides the others (console:
-"WebGLMap can only have one visible elevation layer"). For a dataset published as many files, create one model over
-all of them (experimental):
+A DEM published as tiles is one **mosaic**: where tiles overlap, the first one wins.
 
 ```ts
-const terrain = await GeoTiffTileSetModel.createFromURLs(tileUrls, {dataType: RasterDataType.ELEVATION});
+const tileUrls: string[] = ...;          // the tiles of one DEM
+const terrain = await GeoTiffTileSetModel.create({
+  inputs: tileUrls.map((url) => ({url})),
+  dataType: RasterDataType.ELEVATION,
+});
 ```
 
-Imagery has no such limit: show image files as one layer each, for example in a `LayerGroup`.
+For imagery, a mosaic is the same band name in several inputs (`inputs: urls.map((url) => ({url, bands: ["red", "green", "blue"]}))`).
+Units, several bands, combining DEMs: see the guide, section 4.4.
+
+Elevation tiles are delivered as LuciadFusion delivers its elevation (LTS) tiles: a quadtree of **64 x 64 point
+samples** per tile spanning the tile edge to edge (no seams), encoded as LuciadFusion's **LuciadElev0 PNG**. Heights
+are interpolated (bilinear, nodata aware) from the most suitable image; GDAL scale/offset is applied. With several
+bands, `elevation.height` names one or combines them (`"where(isnan(lidar), national, lidar)"`);
+`elevation.noDataHeight` replaces missing data. LuciadRIA shows **one elevation layer** at a time: make a tiled DEM one
+mosaic model. `model.asElevation()` and `terrain.withStyle(style)` make twins that read nothing twice.
 
 To turn any elevation file into a suitable COG, use [`scripts/elevation-to-cog.sh`](scripts/elevation-to-cog.sh)
 (GDAL): a single Float32 band with nodata, optional reprojection, 256 x 256 tiles, DEFLATE and averaged overviews.
 
-```bash
-scripts/elevation-to-cog.sh dem.hgt dem-cog.tif
-scripts/elevation-to-cog.sh "tiles.vrt" dem-3857.tif --t-srs EPSG:3857
-```
-
-### Coordinate references
-
-The model uses the EPSG code in the GeoTIFF (or a `.prj` file next to it, or `options.reference`). When LuciadRIA
-does not know the code, `createFromURL` rejects with a `GeoTiffModelError` whose `cause` is `"UnknownIdentifier"`
-and whose `identifier` is the code: register its definition and try again.
+### Finding data with STAC
 
 ```ts
-import {addReference, parseWellKnownText} from "@luciad/ria/reference/ReferenceProvider.js";
-import {GeoTiffModelError} from "ria-geotiff";
+import {StacClient} from "ria-geotiff/stac";
 
-try {
-    model = await GeoTiffTileSetModel.createFromURL(url);
-} catch (error) {
-    if (error instanceof GeoTiffModelError && error.cause === "UnknownIdentifier") {
-        addReference(parseWellKnownText(await fetchWkt(error.identifier!)), error.identifier);
-        model = await GeoTiffTileSetModel.createFromURL(url);
-    } else throw error;
-}
+const catalogUrl = ...;    // the STAC API URL the user entered
+const area = ...;          // [west, south, east, north] the user drew
+const catalog = await StacClient.connect(catalogUrl);
+const collections = await catalog.collections({area});            // 1. capabilities
+const id = ...;                                                   // the collection the user picked
+const collection = await catalog.collection(id);                  // interval, bands, queryables
+const selection = {collection: id, area, datetime: "2024", maxCloud: 10};
+const problems = catalog.check(selection, collection);            // 2. choose: [] when it fits
+const found = await catalog.select({...selection, pick: {per: "month"}});
+const model = await GeoTiffTileSetModel.create({stac: {items: found.items, per: "month"}});   // 3. model
+map.layerTree.addChild(new RasterTileSetLayer(model, {label: id}));                         // 4. layer
+model.getSource().periods;   // ["2024-01", ...]: bands red_2024_01, ... for a time slider
 ```
 
-Error causes: `ERROR_LOADING_FILE`, `NOTCOG`, `UnknownIdentifier`, `BoundsMissing`, `INVALIDELEVATION`,
-`READ_FAILED`.
+Items of one period are a mosaic, several periods a time series; the model has every band of the items, and opens an
+asset when a style first reads it. The
+client compiles each search for the server (CQL2-JSON, CQL2-text, Query extension or a client-side filter), verifies
+the first page and falls back when a filter was ignored; `plan.degradations` says what it did. Planetary Computer
+assets are signed automatically.
 
-### Read errors while browsing
+### Coordinate references and errors
 
-Once a model is created, reading its data can still fail (a request fails, a block of a file is damaged). For
-elevation the model recovers: it falls back to a more detailed image of the same file, or shows that file's area as
-no data while the other files of a mosaic still show. Each problem is reported once, as a `GeoTiffReadError`, so the
-application can log it or show it to the user:
+The model uses the EPSG code in the GeoTIFF, else the input's `crsName` (STAC sources take it from `proj:code` /
+`proj:epsg`, for files with a user-defined projection), else a `.prj` file next to it; `options.reference` overrides
+them all. When LuciadRIA
+does not know the code, `GeoTiffTileSetModel.create` rejects with a `GeoTiffModelError` whose `cause` is `"UnknownIdentifier"` and whose
+`identifier` is the code: register its definition with `addReference(parseWellKnownText(wkt), identifier)` and try
+again. Other causes: `ERROR_LOADING_FILE`, `BoundsMissing`, `INVALIDELEVATION`, `REFERENCE_MISMATCH`.
+`GeoTiffTileSetModel.create` never throws synchronously. Problems while browsing are reported once each as a `GeoTiffReadError` to
+`onReadError` / `addReadErrorListener` (shared with twins), else logged with `console.warn`.
 
-```ts
-const terrain = await GeoTiffTileSetModel.createFromURLs(urls, {
-    dataType: RasterDataType.ELEVATION,
-    onReadError: (error) => showWarning(`${error.url}: ${error.message}`), // error.recovery: "finerImage" | "nodata"
-});
-const handle = terrain.addReadErrorListener((error) => console.log(error.image, error.originalError));
-handle.remove();
-```
+### Protected data
 
-Without listeners the model logs them with `console.warn`.
+`credentials`, `requestHeaders` and `requestParameters` are LuciadRIA's `HttpRequestOptions`, accepted by `GeoTiffTileSetModel.create`,
+per input, and by `StacClient.connect`. They are sent only to the origin of a URL the application gave for them, never
+to discovered URLs (manifest files on another server, STAC assets, links to other hosts); a redirect to another
+origin is refused. `model.requestHeaders = {...}` renews a token for the next requests. They are never written to
+manifests or shown in messages.
 
-### Gradients
+### Inspecting a file, and migrating from 0.0.x
 
-Single-band imagery is colored with a gradient: color stops from level 0 to 1 and the data `range` they span.
-Without a range the full range of the data type is used (for float data: the GDAL statistics in the file, or 0..1).
-
-```ts
-const gradient = {
-    colorMap: [
-        {level: 0, color: "#0000FF"},
-        {level: 500 / 8848, color: "#00FF00"},
-        {level: 2000 / 8848, color: "#FFFF00"},
-        {level: 4000 / 8848, color: "#A52A2A"},
-        {level: 1, color: "#FFFFFF"},
-    ],
-    range: {min: 0, max: 8848},
-};
-const model = await GeoTiffTileSetModel.createFromURL(url, {gradient});
-model.setGradient(otherGradient); // later
-```
-
-### Bands
-
-```ts
-// Combine three bands into a color image
-await GeoTiffTileSetModel.createFromURL(url, {bandMapping: {red: 3, green: 2, blue: 1, rgb: true}});
-// Color one band of a multiband file with a gradient
-await GeoTiffTileSetModel.createFromURL(url, {gradient, bandMapping: {gray: 2, rgb: false}});
-model.setBandMapping({red: 0, green: 1, blue: 2, rgb: true}); // later
-```
-
-### HTTP options
-
-`credentials` (send cookies cross-origin), `requestHeaders` and `requestParameters` (added to the query string) apply
-to every request. `infoFromURL(url)` reads only the header and reports size, bands, data type, CRS, tiling and
-whether the file is a COG.
+`GeoTiffTileSetModel.infoFromURL(url)` (size, bands, data type, CRS, tiling, COG layout) and `model.getModelInfo()`
+are the first step for a single file. Coming from 0.0.x: the URL factory and the gradient, band mapping and nodata
+setters are replaced by `GeoTiffTileSetModel.create` with a `style`, see the
+[migration table](docs/developer-guide.md#migrating-from-00x).
 
 ## geotiff.js version
 

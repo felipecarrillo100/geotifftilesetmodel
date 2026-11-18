@@ -76,3 +76,44 @@ for name, x0 in (("west", 0), ("east", 150)):
     gdal.Translate(os.path.join(HERE, f"elevation-3857-float32-{name}.tif"), half, format="COG",
                    creationOptions=["BLOCKSIZE=64", "COMPRESS=DEFLATE", "OVERVIEW_RESAMPLING=AVERAGE", "OVERVIEWS=IGNORE_EXISTING"])
     print(f"elevation-3857-float32-{name}.tif", os.path.getsize(os.path.join(HERE, f"elevation-3857-float32-{name}.tif")), "bytes")
+
+# 6. Sentinel-2-like separate band files in UTM 33N: red and NIR at 10 m (UInt16, reflectance = DN * 0.0001 - 0.1,
+#    nodata 0) and a scene classification band at 20 m (classes, nearest overviews). Known values:
+#    red DN = 1000 + 10 * column, NIR DN = 3000 + 10 * row; SCL = 4 (vegetation) west half, 9 (cloud) east half.
+ou = (500000.0, 5000000.0)
+cols = np.tile(np.arange(128), (128, 1))
+rows = cols.T
+red = (1000 + 10 * cols).astype(np.uint16)
+red[0:4, 0:4] = 0                                             # nodata corner
+write("s2-red-10m.tif", red, 32633, ou, 10.0, dtype=gdal.GDT_UInt16, nodata=0, scale=0.0001, offset=-0.1)
+nir = (3000 + 10 * rows).astype(np.uint16)
+write("s2-nir-10m.tif", nir, 32633, ou, 10.0, dtype=gdal.GDT_UInt16, nodata=0, scale=0.0001, offset=-0.1)
+scl = np.where(np.tile(np.arange(64), (64, 1)) < 32, 4, 9).astype(np.uint8)
+write("s2-scl-20m.tif", scl, 32633, ou, 20.0, dtype=gdal.GDT_Byte, overview_resampling="NEAREST")
+
+# 7. A 12-band "monthly temperature" file with GDAL band descriptions Jan..Dec: band m holds the value m everywhere
+#    (plus 0.1 * column), so tests can check band naming and time-series expressions such as Jul - Jan.
+months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+stack = np.stack([np.tile(m + 1 + 0.1 * np.arange(64), (32, 1)) for m in range(12)]).astype(np.float32)
+mem = gdal.GetDriverByName("MEM").Create("", 64, 32, 12, gdal.GDT_Float32)
+mem.SetGeoTransform([10.0, 0.1, 0, 50.0, 0, -0.1])
+srs = osr.SpatialReference(); srs.ImportFromEPSG(4326); mem.SetProjection(srs.ExportToWkt())
+for m in range(12):
+    band = mem.GetRasterBand(m + 1)
+    band.WriteArray(stack[m]); band.SetDescription(months[m]); band.SetNoDataValue(-9999)
+gdal.Translate(os.path.join(HERE, "monthly-4326-float32.tif"), mem, format="COG",
+               creationOptions=["BLOCKSIZE=64", "COMPRESS=DEFLATE", "OVERVIEWS=NONE"])
+print("monthly-4326-float32.tif", os.path.getsize(os.path.join(HERE, "monthly-4326-float32.tif")), "bytes")
+
+# 8. GeoTIFFs that are not COGs, for probeCog (made with the GDAL command line tools from the fixtures above):
+#    strips; tiles without overviews (128 x 96 pixels, larger than one 64 x 64 tile); tiles whose overview
+#    directories were appended after the image data by gdaladdo (uncompressed, so they lie beyond the first 64 KiB).
+import subprocess
+def run(*args):
+    subprocess.run(args, check=True, cwd=HERE)
+run("gdal_translate", "-q", "-of", "GTiff", "-co", "TILED=NO", "-co", "COMPRESS=DEFLATE", "rgb-3857-uint8.tif", "not-cog-strips.tif")
+run("gdal_translate", "-q", "-of", "GTiff", "-co", "TILED=YES", "-co", "BLOCKXSIZE=64", "-co", "BLOCKYSIZE=64", "-co", "COMPRESS=DEFLATE",
+    "rgb-3857-uint8.tif", "not-cog-no-overviews.tif")
+run("gdal_translate", "-q", "-of", "GTiff", "-co", "TILED=YES", "-co", "BLOCKXSIZE=64", "-co", "BLOCKYSIZE=64", "-co", "COMPRESS=NONE",
+    "elevation-3857-float32.tif", "not-cog-ifd-at-end.tif")
+run("gdaladdo", "-q", "-r", "average", "not-cog-ifd-at-end.tif", "2", "4")

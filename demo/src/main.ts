@@ -12,7 +12,7 @@ import type {LayerTreeNode} from "@luciad/ria/view/LayerTreeNode.js";
 import type {Bounds} from "@luciad/ria/shape/Bounds.js";
 import type {PerspectiveCamera} from "@luciad/ria/view/camera/PerspectiveCamera.js";
 import {GeoTiffTileSetModel} from "ria-geotiff";
-import {withReferenceRetry} from "./references.js";
+import {referenceWkt} from "./references.js";
 import {createLayerControl, isElevation, layerBounds} from "./layerControl.js";
 import {loadSwissArea} from "./swisstopo.js";
 
@@ -170,10 +170,12 @@ function fileName(url: string): string {
 
 async function addElevationUrl(url: string) {
     const t = performance.now();
-    const model = await withReferenceRetry(() => GeoTiffTileSetModel.createFromURL(url, {
+    const model = await GeoTiffTileSetModel.create({
+        url,
         dataType: RasterDataType.ELEVATION,
+        resolveReference: referenceWkt,
         onReadError: (error) => log(`${fileName(url)}: ${error.message}`, true),
-    }), log);
+    });
     const layer = new RasterTileSetLayer(model, {label: fileName(url)});
     addLayer(layer);
     const info = model.getModelInfo();
@@ -183,7 +185,7 @@ async function addElevationUrl(url: string) {
 }
 
 async function addImageryUrl(url: string) {
-    const model = await withReferenceRetry(() => GeoTiffTileSetModel.createFromURL(url), log);
+    const model = await GeoTiffTileSetModel.create({url, resolveReference: referenceWkt});
     const layer = new RasterTileSetLayer(model, {label: fileName(url)});
     addLayer(layer);
     const info = model.getModelInfo();

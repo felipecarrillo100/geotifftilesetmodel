@@ -14,8 +14,9 @@ import {ensureReference} from "./references.js";
  * served with HTTP range and CORS support, and lists them in a STAC catalogue (also CORS enabled). For an LV95
  * box this finds the latest tile of each kind and opens the COGs with ria-geotiff:
  *
- * - elevation: ONE layer over all tiles (`createFromURLs`), because LuciadRIA shows only one elevation layer;
- * - imagery: one layer per tile, in a layer group (no such limit for imagery).
+ * - elevation: ONE layer over all tiles, a mosaic (the same band name in every input), because LuciadRIA shows
+ *   only one elevation layer;
+ * - imagery: also one mosaic model over all tiles, with a fixed 8-bit stretch.
  */
 
 const STAC = "https://data.geo.admin.ch/api/stac/v0.9/collections";
@@ -67,25 +68,7 @@ async function findTiles(collection: string, gsd: number, area: SwissArea): Prom
     return new Map([...latest].map(([tile, {href}]) => [tile, href]));
 }
 
-/** Runs `tasks` with at most `limit` in flight. */
-async function pooled<T>(tasks: (() => Promise<T>)[], limit: number): Promise<PromiseSettledResult<T>[]> {
-    const results: PromiseSettledResult<T>[] = new Array(tasks.length);
-    let next = 0;
-    const worker = async () => {
-        while (next < tasks.length) {
-            const i = next++;
-            try {
-                results[i] = {status: "fulfilled", value: await tasks[i]()};
-            } catch (reason) {
-                results[i] = {status: "rejected", reason};
-            }
-        }
-    };
-    await Promise.all(Array.from({length: Math.min(limit, tasks.length)}, worker));
-    return results;
-}
-
-/** One elevation layer over all tiles of the area, and a group with one imagery layer per tile. */
+/** One elevation layer over all tiles of the area, and one imagery mosaic layer over them. */
 export async function loadSwissArea(area: SwissArea, log: (message: string, error?: boolean) => void) {
     const t0 = performance.now();
     const [elevationTiles, imageryTiles] = await Promise.all([
@@ -95,7 +78,8 @@ export async function loadSwissArea(area: SwissArea, log: (message: string, erro
     log(`swisstopo catalogue: ${elevationTiles.size} elevation and ${imageryTiles.size} imagery tiles ` +
         `(${area.width} x ${area.height} km), ${Math.round(performance.now() - t0)} ms`);
 
-    const elevationModel = await GeoTiffTileSetModel.createFromURLs([...elevationTiles.values()], {
+    const elevationModel = await GeoTiffTileSetModel.create({
+        inputs: [...elevationTiles.values()].map((url) => ({url, bands: "height"})),
         dataType: RasterDataType.ELEVATION,
         // Problems reading a tile's data while browsing: shown in the demo's log (the model recovers on its own).
         onReadError: (error) => log(`swissALTI3D: ${error.message}`, true),
@@ -105,13 +89,17 @@ export async function loadSwissArea(area: SwissArea, log: (message: string, erro
     });
 
     const imagery = new LayerGroup({label: `SWISSIMAGE 10 cm (${imageryTiles.size} tiles)`});
-    const entries = [...imageryTiles];
-    const results = await pooled(entries.map(([tile, href]) => async () =>
-        new RasterTileSetLayer(await GeoTiffTileSetModel.createFromURL(href), {label: `SWISSIMAGE ${tile}`})), 8);
-    results.forEach((r, i) => {
-        if (r.status === "fulfilled") imagery.addChild(r.value);
-        else log(`SWISSIMAGE ${entries[i][0]}: ${(r.reason as Error).message}`, true);
-    });
+    try {
+        // One mosaic: the same band names in every tile.
+        const mosaic = await GeoTiffTileSetModel.create({
+            inputs: [...imageryTiles.values()].map((url) => ({url, bands: ["red", "green", "blue"]})),
+            style: {render: {type: "rgb", red: "red", green: "green", blue: "blue", stretch: [0, 255]}},
+            onReadError: (error) => log(`SWISSIMAGE: ${error.message}`, true),
+        });
+        imagery.addChild(new RasterTileSetLayer(mosaic, {label: `SWISSIMAGE (${imageryTiles.size} tiles, one layer)`}));
+    } catch (e) {
+        log(`SWISSIMAGE: ${(e as Error).message}`, true);
+    }
     log(`swisstopo area ready in ${Math.round(performance.now() - t0)} ms (all tiles streamed from data.geo.admin.ch)`);
     return {elevation, imagery};
 }

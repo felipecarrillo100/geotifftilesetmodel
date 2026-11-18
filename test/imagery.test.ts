@@ -2,27 +2,33 @@ import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {PixelFormat} from "@luciad/ria/model/tileset/PixelFormat.js";
 import {RasterDataType} from "@luciad/ria/model/tileset/RasterDataType.js";
 import {GeoTiffTileSetModel, PixelMeaningEnum} from "../src/index.js";
-import {resolveBandMapping} from "../src/bandstorgb.js";
 import {referenceIdentifierFromGeoKeys} from "../src/utils.js";
 import {withRequestParameters} from "../src/fileutils.js";
 import {openFixture, startRangeServer, tileData} from "./helpers.js";
 
 describe("imagery", () => {
     it("serves an RGB COG level by level, full resolution last", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("rgb-3857-uint8.tif"), {pool: null});
+        const model = await GeoTiffTileSetModel.create({
+            inputs: [{file: await openFixture("rgb-3857-uint8.tif"), resampling: "nearest"}], tileSize: 64, pool: null,
+            style: {render: {type: "rgb", red: "b1", green: "b2", blue: "b3", stretch: [0, 255]}},
+        });
         expect(model.dataType).toBe(RasterDataType.IMAGE);
         expect(model.levelCount).toBe(2); // 64x48 overview + 128x96 image
         expect(model.getTileColumnCount(1)).toBe(2);
         const data = await tileData(model, {level: 1, x: 1, y: 1});
-        expect(data.pixelFormat).toBe(PixelFormat.RGB_888);
+        // The engine delivers RGBA tiles (0.0.x delivered RGB_888 for opaque tiles); the colours are unchanged.
+        expect(data.pixelFormat).toBe(PixelFormat.RGBA_8888);
         const px = new Uint8Array(data.data as ArrayBuffer);
-        expect(px.length).toBe(64 * 64 * 3);
+        expect(px.length).toBe(64 * 64 * 4);
         // Top-left pixel of the top-right tile: column 64 -> red 128, row 0 -> green 0, blue 77.
-        expect([px[0], px[1], px[2]]).toEqual([128, 0, 77]);
+        expect([px[0], px[1], px[2], px[3]]).toEqual([128, 0, 77, 255]);
     });
 
     it("makes the part of partial edge tiles beyond the image transparent", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("rgb-3857-uint8.tif"), {pool: null});
+        const model = await GeoTiffTileSetModel.create({
+            inputs: [{file: await openFixture("rgb-3857-uint8.tif"), resampling: "nearest"}], tileSize: 64, pool: null,
+            style: {render: {type: "rgb", red: "b1", green: "b2", blue: "b3", stretch: [0, 255]}},
+        });
         // The image is 96 rows high: the bottom tile row (y = 0) only has 32 rows of data.
         const data = await tileData(model, {level: 1, x: 0, y: 0});
         expect(data.pixelFormat).toBe(PixelFormat.RGBA_8888);
@@ -31,17 +37,16 @@ describe("imagery", () => {
         expect(px[(40 * 64) * 4 + 3]).toBe(0);   // row 40 is beyond it
     });
 
-    it("renders single-band data without nodata as RGB_888 with 3 bytes per pixel", async () => {
+    it("declares the pixel format of the bytes it delivers for single-band data without nodata", async () => {
         // Regression: a missing GDAL nodata (null) produced 4-byte pixels declared as RGB_888.
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("gray-3857-uint16.tif"), {pool: null});
-        expect(model.getNodata()).toBeNull();
+        const model = await GeoTiffTileSetModel.create({inputs: [{file: await openFixture("gray-3857-uint16.tif"), resampling: "nearest"}], tileSize: 64, pool: null});
         const data = await tileData(model, {level: 1, x: 0, y: 1});
-        expect(data.pixelFormat).toBe(PixelFormat.RGB_888);
-        expect((data.data as ArrayBuffer).byteLength).toBe(64 * 64 * 3);
+        expect(data.pixelFormat).toBe(PixelFormat.RGBA_8888);
+        expect((data.data as ArrayBuffer).byteLength).toBe(64 * 64 * 4);
     });
 
     it("reports file information", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {pool: null});
+        const model = await GeoTiffTileSetModel.create({inputs: [{file: await openFixture("elevation-3857-float32.tif"), resampling: "nearest"}], tileSize: 64, pool: null});
         const info = model.getModelInfo();
         expect(info).toMatchObject({
             width: 300, height: 200, tileWidth: 64, tileHeight: 64, bands: 1, isCog: true,
@@ -64,11 +69,6 @@ describe("colour models", () => {
 });
 
 describe("helpers", () => {
-    it("accepts the deprecated isRGB alias in band mappings", () => {
-        expect(resolveBandMapping({isRGB: true, red: 2}).rgb).toBe(true);
-        expect(resolveBandMapping(undefined)).toEqual({gray: 0, red: 0, green: 0, blue: 0, rgb: false});
-    });
-
     it("does not invent EPSG codes", () => {
         expect(referenceIdentifierFromGeoKeys(null)).toBeNull();
         expect(referenceIdentifierFromGeoKeys({ProjectedCSTypeGeoKey: 32767})).toBeNull();
@@ -81,13 +81,14 @@ describe("helpers", () => {
     });
 });
 
-describe("createFromURL over HTTP", () => {
+describe("create from a URL over HTTP", () => {
     let server: Awaited<ReturnType<typeof startRangeServer>>;
     beforeAll(async () => { server = await startRangeServer(); });
     afterAll(async () => { await server.close(); });
 
     it("reads the COG with range requests and sends headers and parameters", async () => {
-        const model = await GeoTiffTileSetModel.createFromURL(`${server.url}/elevation-3857-float32.tif`, {
+        const model = await GeoTiffTileSetModel.create({
+            url: `${server.url}/elevation-3857-float32.tif`,
             dataType: RasterDataType.ELEVATION,
             requestHeaders: {"X-Test": "yes"},
             requestParameters: {token: "abc"},
@@ -105,7 +106,8 @@ describe("createFromURL over HTTP", () => {
         // it, every read becomes its own small range request (27 requests of 4 bytes to 1 KiB for these three tiles
         // instead of 1), which in browsers ends in refused streams and corrupt reads. The model passes blockSize.
         const before = server.requests.length;
-        const model = await GeoTiffTileSetModel.createFromURL(`${server.url}/elevation-3857-float32.tif`, {
+        const model = await GeoTiffTileSetModel.create({
+            url: `${server.url}/elevation-3857-float32.tif`,
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -122,7 +124,7 @@ describe("createFromURL over HTTP", () => {
     });
 
     it("rejects missing files with ERROR_LOADING_FILE", async () => {
-        await expect(GeoTiffTileSetModel.createFromURL(`${server.url}/missing.tif`, {pool: null}))
+        await expect(GeoTiffTileSetModel.create({url: `${server.url}/missing.tif`, pool: null}))
             .rejects.toMatchObject({cause: "ERROR_LOADING_FILE"});
     });
 

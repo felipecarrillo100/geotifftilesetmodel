@@ -1,0 +1,89 @@
+{
+  "type": "Feature",
+  "stac_version": "1.1.0",
+  "id": "sample-2025",
+  "collection": "s2-sample",
+  "bbox": [
+    14.9995,
+    45.1415,
+    15.017,
+    45.154
+  ],
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          14.9995,
+          45.1415
+        ],
+        [
+          15.017,
+          45.1415
+        ],
+        [
+          15.017,
+          45.154
+        ],
+        [
+          14.9995,
+          45.154
+        ],
+        [
+          14.9995,
+          45.1415
+        ]
+      ]
+    ]
+  },
+  "properties": {
+    "datetime": "2025-06-15T10:00:00Z",
+    "eo:cloud_cover": 40,
+    "platform": "sample",
+    "proj:code": "EPSG:32633"
+  },
+  "assets": {
+    "red": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ],
+      "title": "Red",
+      "eo:bands": [
+        {
+          "name": "B04",
+          "common_name": "red"
+        }
+      ],
+      "href": "../../../s2-red-10m.tif"
+    },
+    "nir": {
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ],
+      "title": "NIR",
+      "eo:bands": [
+        {
+          "name": "B08",
+          "common_name": "nir"
+        }
+      ],
+      "href": "../../../s2-nir-10m.tif"
+    }
+  },
+  "links": [
+    {
+      "rel": "collection",
+      "href": "../collection.json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json"
+    },
+    {
+      "rel": "root",
+      "href": "../../catalog.json"
+    }
+  ]
+}

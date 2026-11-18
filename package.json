@@ -12,16 +12,35 @@
       "import": "./lib/index.js",
       "default": "./lib/index.js"
     },
+    "./ramps": {
+      "types": "./lib/rs/ramps.d.ts",
+      "import": "./lib/rs/ramps.js",
+      "default": "./lib/rs/ramps.js"
+    },
+    "./presets": {
+      "types": "./lib/rs/presets.d.ts",
+      "import": "./lib/rs/presets.js",
+      "default": "./lib/rs/presets.js"
+    },
+    "./stac": {
+      "types": "./lib/stac/index.d.ts",
+      "import": "./lib/stac/index.js",
+      "default": "./lib/stac/index.js"
+    },
     "./lib/*.js": "./lib/*.js",
     "./lib/*": "./lib/*.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./schema/*": "./schema/*"
   },
   "files": [
     "lib/",
     "src/",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "schema/",
+    "docs/manifest.md",
+    "docs/developer-guide.md"
   ],
   "sideEffects": false,
   "scripts": {
@@ -35,7 +54,9 @@
     "verify": "npm run typecheck && npm test && npm run build && npm run check:no-ria && npm run lint",
     "prepublishOnly": "npm run verify",
     "demo": "vite --config demo/vite.config.ts",
-    "demo:build": "vite build --config demo/vite.config.ts"
+    "demo:build": "vite build --config demo/vite.config.ts",
+    "docs": "typedoc",
+    "docs:check": "typedoc --emit none --treatValidationWarningsAsErrors"
   },
   "keywords": [
     "luciadria",
@@ -68,8 +89,12 @@
   },
   "devDependencies": {
     "@luciad/ria": "2026.1.2",
+    "@shoelace-style/shoelace": "~2.20.1",
     "@types/node": "^22.20.5",
+    "chart.js": "^4.6.1",
     "publint": "^0.3.25",
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "~4.14.1",
     "typescript": "~5.7.3",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"

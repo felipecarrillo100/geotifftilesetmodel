@@ -14,15 +14,24 @@ import {centreExtent, columnOf, RasterGrid, rowOf} from "./geometry.js";
  * overview), so the COG itself can use any tile size and any overview layout.
  */
 
-/** Default number of samples along each side of an elevation tile (LuciadFusion uses 64). */
+/** Default number of samples along each side of an elevation tile (LuciadFusion uses 64).
+ *
+ * @category Model */
 export const DEFAULT_ELEVATION_TILE_SIZE = 64;
 
+/** Layout of an elevation quadtree, as computed by {@link elevationTileStructure}.
+ *
+ * @category Model */
 export interface ElevationTileStructure {
     /** Bounds `[x, width, y, height]` of the tile set: through the centres of the outer pixels. */
     bounds: [number, number, number, number];
+    /** Number of tile columns at level 0. */
     level0Columns: number;
+    /** Number of tile rows at level 0. */
     level0Rows: number;
+    /** Number of levels; each level doubles the tile count per axis. */
     levelCount: number;
+    /** Number of samples along each side of a tile. */
     tileSize: number;
 }
 
@@ -33,10 +42,19 @@ export interface ElevationTileStructure {
  * data (no extrapolation at the borders). Level 0 has 1 tile along the shorter axis and as many as needed to
  * keep tiles roughly square along the longer one. The deepest level is the first whose sample spacing is at
  * least as fine as the full-resolution pixels.
+ *
+ * @param main grid of the full-resolution image
+ * @param tileSize number of samples along each side of a tile, an integer >= 2. Default
+ *   {@link DEFAULT_ELEVATION_TILE_SIZE}.
+ * @returns the bounds, level 0 tile counts and number of levels of the quadtree
+ * @throws `RangeError` when `tileSize` is not an integer >= 2
+ * @throws `Error` when the image has fewer than 2 x 2 pixels
+ *
+ * @category Model
  */
 export function elevationTileStructure(main: RasterGrid, tileSize = DEFAULT_ELEVATION_TILE_SIZE): ElevationTileStructure {
     if (!Number.isInteger(tileSize) || tileSize < 2) {
-        throw new Error(`Elevation tile size must be an integer >= 2, got ${tileSize}`);
+        throw new RangeError(`elevation.tileSize must be an integer >= 2, got ${tileSize}`);
     }
     if (main.width < 2 || main.height < 2) {
         throw new Error(`Elevation needs at least 2 x 2 pixels, got ${main.width} x ${main.height}`);
@@ -60,6 +78,13 @@ export function elevationTileStructure(main: RasterGrid, tileSize = DEFAULT_ELEV
 /**
  * Index of the image to sample for a given sample spacing: the coarsest image whose pixels are still at least as
  * fine as the spacing (falls back to the finest image). `grids` must be ordered from finest to coarsest.
+ *
+ * @param grids grids of the images, finest (full resolution) first
+ * @param spacingX distance between samples along x, in reference units
+ * @param spacingY distance between samples along y, in reference units
+ * @returns the index in `grids` of the image to read
+ *
+ * @category Model
  */
 export function chooseImage(grids: RasterGrid[], spacingX: number, spacingY: number): number {
     let chosen = 0;
@@ -71,7 +96,15 @@ export function chooseImage(grids: RasterGrid[], spacingX: number, spacingY: num
     return chosen;
 }
 
-/** Sample positions of a tile: x from west to east, y from north to south. */
+/**
+ * Sample positions of a tile: x from west to east, y from north to south, spanning the tile edge to edge.
+ *
+ * @param tileBounds bounds of the tile, in reference units
+ * @param tileSize number of samples along each side
+ * @returns `xs` and `ys`, `tileSize` coordinates each; the last sample lies exactly on the east / south edge
+ *
+ * @category Model
+ */
 export function samplePositions(tileBounds: { x: number; y: number; width: number; height: number }, tileSize: number) {
     const xs = new Float64Array(tileSize);
     const ys = new Float64Array(tileSize);
@@ -86,7 +119,16 @@ export function samplePositions(tileBounds: { x: number; y: number; width: numbe
     return {xs, ys};
 }
 
-/** Pixel window `[left, top, right, bottom]` (right/bottom exclusive) holding every pixel the samples need. */
+/**
+ * Pixel window holding every pixel that {@link interpolate} needs for the given samples.
+ *
+ * @param grid grid of the image that is read
+ * @param xs sample x coordinates, in reference units
+ * @param ys sample y coordinates, in reference units
+ * @returns `[left, top, right, bottom]` in pixels of the image (right/bottom exclusive), clamped to the image
+ *
+ * @category Model
+ */
 export function sampleWindow(grid: RasterGrid, xs: Float64Array, ys: Float64Array): [number, number, number, number] {
     const clampC = (c: number) => Math.min(Math.max(c, 0), grid.width - 1);
     const clampR = (r: number) => Math.min(Math.max(r, 0), grid.height - 1);
@@ -124,8 +166,16 @@ function axisCoordinate(p: number, size: number): { p0: number; p1: number; f: n
  * positions further out are clamped. Where some of the 4 neighbours are nodata, the remaining ones are re-weighted
  * (extrapolation then falls back to the nearest valid pixel); where all 4 are nodata the output is `nodataOut`.
  *
+ * @param grid grid of the image the values were read from
+ * @param window the pixel window the values cover, as returned by {@link sampleWindow}
  * @param values raster values of `window`, row-major, row 0 = north
+ * @param xs sample x coordinates, west to east
+ * @param ys sample y coordinates, north to south
  * @param isNoData returns true for values that must be ignored (NaN is always ignored)
+ * @param nodataOut value written where no valid pixel is available
+ * @returns the interpolated values, `xs.length * ys.length` of them, row-major with row 0 = north
+ *
+ * @category Model
  */
 export function interpolate(
     grid: RasterGrid,

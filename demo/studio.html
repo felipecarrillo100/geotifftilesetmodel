@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en" class="sl-theme-dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ria-geotiff Studio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cdefs%3E%3ClinearGradient id='g'%3E%3Cstop offset='0' stop-color='%23440154'/%3E%3Cstop offset='.5' stop-color='%2326828e'/%3E%3Cstop offset='1' stop-color='%23fde725'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='16' height='16' rx='4' fill='url(%23g)'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <style>
+        :root {
+            --sl-font-sans: "Inter", system-ui, sans-serif;
+            --sl-font-mono: "JetBrains Mono", ui-monospace, monospace;
+            --glass: rgb(17 20 28 / 0.82);
+            --glass-border: rgb(255 255 255 / 0.08);
+            --text-dim: rgb(255 255 255 / 0.62);
+            --accent: #7dd3fc;
+            color-scheme: dark;
+        }
+        /* Shoelace components set their own display: keep the hidden attribute working on them. */
+        [hidden] { display: none !important; }
+        html, body { margin: 0; height: 100%; background: #0b0d12; color: #e8eaf0; font: 13px/1.45 var(--sl-font-sans); }
+        #map { position: absolute; inset: 0; }
+        .glass { position: absolute; z-index: 5; background: var(--glass); backdrop-filter: blur(14px) saturate(140%);
+                 -webkit-backdrop-filter: blur(14px) saturate(140%); border: 1px solid var(--glass-border);
+                 border-radius: 14px; box-shadow: 0 10px 40px rgb(0 0 0 / 0.45); }
+
+        /* Left column: the studio panel, and the legend and histogram of the active layer below it */
+        #left-stack { position: absolute; z-index: 5; top: 12px; left: 12px; bottom: 12px; width: 400px; display: flex; flex-direction: column;
+                      gap: 8px; pointer-events: none; }
+        #left-stack > .glass { position: static; pointer-events: auto; box-sizing: border-box; }
+
+        /* Studio panel */
+        /* Takes what the legend and histogram below leave; scrolls on its own. */
+        #studio { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+        #studio header { padding: 14px 16px 10px; border-bottom: 1px solid var(--glass-border); }
+        #studio header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
+        #studio header h1 .logo { width: 22px; height: 22px; border-radius: 6px;
+            background: conic-gradient(from 200deg, #440154, #3e4989, #26828e, #35b779, #fde725, #440154); }
+        #studio header p { margin: 2px 0 0; color: var(--text-dim); font-size: 12px; }
+        #studio .scroll { overflow: auto; padding: 12px 16px 16px; flex: 1; }
+        .section-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin: 14px 0 6px; }
+        .row { display: flex; gap: 8px; align-items: center; }
+        .row > * { flex: 1; min-width: 0; }
+        .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        /* Active layer panel */
+        /* Everything that acts on the active layer: its description and its style. */
+        #right-stack > #layer-info { width: 100%; flex: 1 1 0; min-height: 160px; }
+        #layer-info { display: flex; flex-direction: column; overflow: hidden; }
+        #layer-info .info-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+                                 padding: 6px 12px 4px 16px; border-bottom: 1px solid var(--glass-border); }
+        #layer-info .info-head .section-title { margin: 2px 0; }
+        #layer-info .info-head sl-icon-button { font-size: 14px; }
+        #layer-info .info-scroll { overflow: auto; min-height: 0; flex: 1; padding: 10px 16px 16px; }
+        #layer-info .info-body:not(:empty) { margin-bottom: 8px; }
+        #layer-info.collapsed .info-more { display: none; }
+        #layer-info h2 { margin: 0; font-size: 15px; }
+        #layer-info .sub { color: var(--accent); font-size: 12px; margin-top: 1px; }
+        #layer-info p { margin: 6px 0 0; color: rgb(255 255 255 / 0.8); }
+        #layer-info .details { font: 11px var(--sl-font-mono); color: var(--text-dim); margin-top: 6px; word-break: break-all; }
+        .hint { font-size: 11.5px; color: var(--text-dim); margin: 4px 0 0; }
+        .error-text { color: #fca5a5; font-size: 12px; margin-top: 4px; white-space: pre-wrap; }
+        .ok-text { color: #86efac; font-size: 12px; margin-top: 4px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .chips sl-tag::part(base) { cursor: pointer; font-family: var(--sl-font-mono); }
+        sl-select::part(listbox) { max-height: 60vh; }
+        .ramp-tools { display: flex; align-items: center; gap: 2px; margin-top: 8px; }
+        .ramp-preview { flex: 1; height: 16px; border-radius: 4px; border: 1px solid rgb(255 255 255 / .15); }
+        .ramp-editor { margin-top: 6px; max-height: 196px; overflow: auto; display: grid; gap: 4px; }
+        .stop-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+        .stop-row .label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .stop-row sl-input { min-width: 0; }
+        .ramp-swatch { width: 64px; height: 12px; border-radius: 3px; border: 1px solid rgb(255 255 255 / .15); }
+        .spacer { height: 6px; }
+        pre.json { margin: 0; font: 11.5px/1.45 var(--sl-font-mono); white-space: pre-wrap; word-break: break-word; color: #cbd5e1; }
+        sl-tab-panel::part(base) { padding: 12px 0 0; }
+        sl-details::part(content) { padding-top: 6px; }
+
+        /* Add a layer */
+        /* No scroll area of its own: the studio panel scrolls (a nested one hid the items and Show on map far below). */
+        .add-scroll { padding-right: 2px; }
+        /* Show on map stays at the bottom of the panel while items are listed. */
+        /* Shoelace gives the tab body overflow: auto, which would become the (non-scrolling) sticky container. */
+        #panel-tabs::part(body) { overflow: visible; }
+        #step-show { position: sticky; bottom: 0; z-index: 1; background: #1b1f29; box-shadow: 0 -8px 16px rgb(0 0 0 / 0.35); }
+        .identity { font-size: 12px; margin-top: 8px; min-height: 16px; word-break: break-word; }
+        .identity.ok { color: #86efac; }
+        .identity.bad { color: #fca5a5; }
+        .step { margin-top: 12px; padding: 8px 10px 10px; border-radius: 10px; background: rgb(255 255 255 / 0.04); border: 1px solid var(--glass-border); }
+        .step-title { font-weight: 600; font-size: 12.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+        .step-n { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #0b0d12; font-size: 11px; display: inline-grid; place-items: center; }
+        pre.problems { white-space: pre-wrap; font-family: var(--sl-font-mono); font-size: 11px; margin: 6px 0 0; }
+        .item-list { max-height: 220px; overflow: auto; margin-top: 4px; display: grid; gap: 2px; }
+        .item-row { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 6px; align-items: center; font: 11px var(--sl-font-mono);
+                    padding: 2px 4px; border-radius: 4px; cursor: default; }
+        .item-row:hover, .item-row.hot { background: rgb(125 211 252 / 0.15); }
+        .item-row.not-picked .id { opacity: 0.6; }
+        .item-row .reason { color: var(--text-dim); font-size: 10px; }
+        .item-row .id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+        /* Asset formats: green ones open, grey ones are shown but cannot be used (zipped, vector, documents). */
+        .item-row .formats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 3px; padding: 0 0 2px 20px; }
+        .format { font-size: 9.5px; padding: 0 4px; border-radius: 3px; border: 1px solid var(--glass-border); color: var(--text-dim); opacity: .6; }
+        .format.usable { color: #86efac; border-color: rgb(134 239 172 / .4); opacity: 1; }
+        .item-row.unusable { opacity: .6; }
+        .item-row.unusable input { cursor: not-allowed; }
+
+        /* Layers */
+        .layers-title { display: flex; justify-content: space-between; align-items: baseline; }
+        .layers-title .hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin: 0; }
+        .layer-list { max-height: 240px; overflow: auto; display: grid; gap: 2px; }
+        .layer-row { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 2px; align-items: center; padding: 1px 4px;
+                     border-radius: 6px; border: 1px solid transparent; }
+        .layer-row.current { background: rgb(125 211 252 / 0.12); border-color: rgb(125 211 252 / 0.35); }
+        .layer-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; padding: 3px 4px; font-size: 12px; }
+        .layer-row .kind { font-size: 10px; color: var(--accent); border: 1px solid rgb(125 211 252 / .4); border-radius: 4px; padding: 0 4px; margin-right: 2px; }
+        .layer-row sl-icon-button { font-size: 13px; }
+        .layer-row sl-icon-button::part(base) { padding: 3px; }
+
+        /* Legend + histogram */
+        #insight { flex: none; width: 100%; padding: 12px 14px; }
+        #insight h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+        #insight h3 span:last-child { font: 11px var(--sl-font-mono); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ramp { height: 14px; border-radius: 4px; border: 1px solid rgb(255 255 255 / .15); }
+        .ramp-labels { display: flex; justify-content: space-between; font: 11px var(--sl-font-mono); color: var(--text-dim); margin-top: 3px; }
+        .classes { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-size: 11.5px; max-height: 180px; overflow: auto; }
+        .classes div { display: flex; align-items: center; gap: 6px; }
+        .classes i { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid rgb(255 255 255 / .2); }
+        .rgb-legend { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; font: 11.5px var(--sl-font-mono); }
+        #histogram-wrap { height: 128px; margin-top: 10px; display: flex; flex-direction: column; }
+        #histogram-wrap canvas { flex: 1; min-height: 0; }
+        .histogram-title { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); margin-bottom: 2px; }
+
+        /* Right column: layers, HUD, pixel inspector, and the active layer (description and style) taking the rest */
+        sl-dialog::part(panel) { background: #11141c; }
+        #right-stack { position: absolute; z-index: 5; top: 12px; right: 12px; bottom: 12px; width: 400px; display: flex; flex-direction: column;
+                       align-items: flex-end; gap: 8px; pointer-events: none; }
+        #right-stack > .glass { position: static; pointer-events: auto; box-sizing: border-box; flex: none; }
+        /* Above the HUD and inspector below it (flex items, so their .glass z-index 5 applies), so the swipe pickers open over them. */
+        #layers-box { width: 100%; padding: 2px 10px 8px; }
+        #right-stack > #layers-box { z-index: 7; }
+        #right-stack > #layer-info { z-index: 6; }   /* its dropdowns open over the HUD and inspector, under the swipe pickers */
+        #layers-box .section-title { margin: 8px 0 4px; }
+        .swipe-choice { margin-top: 6px; }
+        .layer-controls { display: flex; gap: 14px; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--glass-border); }
+        #hud { padding: 8px 12px; font: 11px/1.5 var(--sl-font-mono); color: var(--text-dim); min-width: 220px; }
+        #hud b { color: #e8eaf0; font-weight: 500; }
+
+        /* Pixel inspector */
+        #inspector { width: 100%; padding: 12px 14px; display: none; }
+        #inspector.visible { display: block; }
+        #inspector h3 { margin: 0; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+        #inspector .where { font: 11px var(--sl-font-mono); color: var(--text-dim); }
+        #inspector .value { font-size: 22px; font-weight: 700; margin: 4px 0; font-variant-numeric: tabular-nums; }
+        #profile-wrap { height: 150px; }
+        #inspector table { width: 100%; border-collapse: collapse; font: 11px var(--sl-font-mono); margin-top: 6px; }
+        #inspector td { padding: 1px 0; color: var(--text-dim); }
+        #inspector td:last-child { text-align: right; color: #e8eaf0; }
+
+        /* Time bar */
+        #timebar { left: 50%; transform: translateX(-50%); bottom: 18px; width: min(560px, calc(100% - 880px)); min-width: 360px;
+                   padding: 10px 16px; display: none; align-items: center; gap: 14px; }
+        #timebar.visible { display: flex; }
+        #timebar .month { font-size: 22px; font-weight: 700; width: 56px; text-align: center; }
+        #timebar sl-range { flex: 1; }
+
+        #loading { position: absolute; z-index: 6; left: 50%; top: 18px; transform: translateX(-50%); padding: 8px 14px; display: none; gap: 10px; align-items: center; }
+        #loading.visible { display: flex; }
+        .credits { position: absolute; z-index: 4; left: 424px; bottom: 6px; right: 424px; font-size: 10.5px; color: #fff; text-shadow: 0 0 3px #000; opacity: .85; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="left-stack">
+
+<aside id="studio" class="glass" aria-label="Studio">
+    <header>
+        <h1><span class="logo"></span>ria-geotiff Studio</h1>
+        <p>Band math, spectral indices and stretches on Cloud Optimized GeoTIFFs, computed in the browser and drawn by LuciadRIA.</p>
+    </header>
+    <div class="scroll">
+        <sl-tab-group id="panel-tabs">
+            <sl-tab slot="nav" panel="add">Add a layer</sl-tab>
+            <sl-tab slot="nav" panel="gallery">Gallery</sl-tab>
+
+            <sl-tab-panel name="gallery">
+                <sl-select id="scene" label="Scene" hoist placeholder="Choose a scene to add"></sl-select>
+                <p class="hint">Each scene is added to the map as a new layer and becomes the active one: its description and style are in the Active layer panel on the right. Click a layer in the Layers list to make it active.</p>
+            </sl-tab-panel>
+
+            <sl-tab-panel name="add">
+                <div class="add-scroll">
+                    <div class="row">
+                        <sl-input id="add-url" size="small" placeholder="Any URL: COG, manifest, STAC item, collection, catalog or API" clearable spellcheck="false" style="flex:1 1 auto; min-width:0"></sl-input>
+                        <sl-button id="add-open" size="small" variant="primary" style="flex:none">Open</sl-button>
+                        <sl-button id="add-file" size="small" style="flex:none">File…</sl-button>
+                    </div>
+                    <input id="add-file-input" type="file" accept=".tif,.tiff,.json,image/tiff,application/json" hidden>
+                    <div class="spacer"></div>
+                    <sl-select id="add-try" size="small" placeholder="Try an example URL…" hoist></sl-select>
+                    <sl-checkbox id="add-log" size="small" checked style="margin-top:6px">Log library calls to the console</sl-checkbox>
+                    <div id="add-identity" class="identity"></div>
+                    <div id="add-error" class="error-text" hidden></div>
+
+                    <div id="stepper" hidden>
+                        <div class="step" id="step-collection">
+                            <div class="step-title"><span class="step-n">1</span>Collection</div>
+                            <sl-checkbox id="add-in-view" size="small" checked>Only collections covering the view</sl-checkbox>
+                            <div class="spacer"></div>
+                            <sl-input id="add-collection-search" size="small" placeholder="Search collections: any part of the title or id" clearable
+                                      spellcheck="false"><sl-icon slot="prefix" name="search"></sl-icon></sl-input>
+                            <div class="spacer"></div>
+                            <sl-select id="add-formats" size="small" label="Formats (of their items)" multiple clearable hoist placeholder="Any format"
+                                       max-options-visible="3" help-text="COG and GeoTIFF are the ones a model opens; clear to list every collection."></sl-select>
+                            <div class="spacer"></div>
+                            <sl-select id="add-collection" size="small" hoist placeholder="Choose a collection"></sl-select>
+                            <div id="add-collection-info" class="hint"></div>
+                            <div id="add-formats-note" class="hint"></div>
+                        </div>
+                        <div class="step" id="step-requirements" hidden>
+                            <div class="step-title"><span class="step-n">2</span>Requirements <span class="hint">(area: the current view)</span></div>
+                            <sl-input id="add-from" size="small" type="date" label="From"></sl-input>
+                            <sl-input id="add-to" size="small" type="date" label="To"></sl-input>
+                            <div class="spacer"></div>
+                            <div id="add-cloud-wrap">
+                                <sl-range id="add-cloud" label="Maximum cloud cover (%)" min="0" max="100" step="1" value="100"></sl-range>
+                                <div class="spacer"></div>
+                            </div>
+                            <sl-select id="add-bands" size="small" label="Bands you need (checked against the collection)" multiple clearable hoist max-options-visible="5"></sl-select>
+                            <div class="spacer"></div>
+                            <sl-select id="add-pick" size="small" label="Pick" value="single" hoist>
+                                <sl-option value="all">All items found (no pick)</sl-option>
+                                <sl-option value="single">The best single item</sl-option>
+                                <sl-option value="year">One per year (time series)</sl-option>
+                                <sl-option value="quarter">One per quarter (time series)</sl-option>
+                                <sl-option value="month">One per month (time series)</sl-option>
+                            </sl-select>
+                            <div class="spacer"></div>
+                            <sl-select id="add-coverage" size="small" label="Coverage of the view" value="best" hoist>
+                                <sl-option value="full">Must contain the whole view</sl-option>
+                                <sl-option value="best">Best covering (mosaic when needed)</sl-option>
+                            </sl-select>
+                            <div class="spacer"></div>
+                            <sl-select id="add-rank" size="small" label="Best means" value="least-cloud" hoist>
+                                <sl-option value="least-cloud">Least cloud</sl-option><sl-option value="newest">Newest</sl-option>
+                                <sl-option value="oldest">Oldest</sl-option>
+                            </sl-select>
+                            <div class="spacer"></div>
+                            <sl-select id="add-months" size="small" label="Months only" multiple clearable hoist max-options-visible="4">
+                                <sl-option value="1">Jan</sl-option><sl-option value="2">Feb</sl-option><sl-option value="3">Mar</sl-option><sl-option value="4">Apr</sl-option>
+                                <sl-option value="5">May</sl-option><sl-option value="6">Jun</sl-option><sl-option value="7">Jul</sl-option><sl-option value="8">Aug</sl-option>
+                                <sl-option value="9">Sep</sl-option><sl-option value="10">Oct</sl-option><sl-option value="11">Nov</sl-option><sl-option value="12">Dec</sl-option>
+                            </sl-select>
+                            <div class="spacer"></div>
+                            <div class="row">
+                                <sl-button id="add-check" size="small" style="flex:none">Check</sl-button>
+                                <sl-button id="add-find" size="small" variant="primary" style="flex:none">Find items</sl-button>
+                                <sl-button id="add-cancel" size="small" style="flex:none" hidden>Cancel</sl-button>
+                            </div>
+                            <pre id="add-problems" class="hint problems"></pre>
+                        </div>
+                        <div class="step" id="step-items" hidden>
+                            <div class="step-title"><span class="step-n">3</span>Items</div>
+                            <div id="add-found" class="hint"></div>
+                            <div class="row" style="margin-top:4px">
+                                <sl-button id="add-all" size="small" variant="text" style="flex:none">All</sl-button>
+                                <sl-button id="add-none" size="small" variant="text" style="flex:none">None</sl-button>
+                                <span id="add-chosen" class="hint" style="text-align:right"></span>
+                            </div>
+                            <div id="add-items" class="item-list"></div>
+                        </div>
+                        <div class="step" id="step-show" hidden>
+                            <div class="step-title"><span class="step-n">4</span>Show on map</div>
+                            <sl-select id="add-per" size="small" label="Chosen items as" value="auto" hoist>
+                                <sl-option value="auto">As picked (time series when picked per period)</sl-option>
+                                <sl-option value="mosaic">One mosaic</sl-option>
+                                <sl-option value="year">Time series per year</sl-option>
+                                <sl-option value="month">Time series per month</sl-option>
+                                <sl-option value="day">Time series per day</sl-option>
+                                <sl-option value="terrain">Terrain: one height mosaic (3D)</sl-option>
+                            </sl-select>
+                            <div id="add-height-wrap" hidden>
+                                <div class="spacer"></div>
+                                <sl-select id="add-height" size="small" label="Heights from" hoist
+                                           help-text="One asset per item. Where items cover the same tile, the newest is used."></sl-select>
+                                <div id="add-terrain-note" class="hint"></div>
+                            </div>
+                            <div class="spacer"></div>
+                            <sl-button id="add-show" size="small" variant="primary"><sl-icon slot="prefix" name="map"></sl-icon>Show on map</sl-button>
+                        </div>
+                    </div>
+                </div>
+            </sl-tab-panel>
+        </sl-tab-group>
+    </div>
+</aside>
+
+<section id="insight" class="glass" aria-label="Legend and histogram">
+    <h3><span>Legend</span><span id="legend-title"></span></h3>
+    <div id="legend"></div>
+    <div id="histogram-wrap">
+        <div class="histogram-title"><span>Histogram</span><span id="histogram-unit"></span></div>
+        <canvas id="histogram" title="Pixel counts per value (overview sample, after masks). Dashed lines: the stretch range of each channel."></canvas>
+    </div>
+</section>
+
+
+</div>
+
+<sl-dialog id="save-dialog" label="Save the current layer as a manifest" style="--width: 600px">
+    <p id="save-status" class="hint" style="margin-top:0"></p>
+    <sl-textarea id="save-manifest" rows="14" resize="auto" readonly style="font-family: var(--sl-font-mono)"></sl-textarea>
+    <sl-copy-button id="save-copy" slot="footer"></sl-copy-button>
+</sl-dialog>
+<!-- Right column: layers, performance, the pixel inspector, then the active layer (description and style). -->
+<div id="right-stack">
+
+<section id="layers-box" class="glass" aria-label="Layers">
+    <div class="section-title layers-title"><span>Layers</span><span class="hint">click a layer to style it</span></div>
+    <div id="layers" class="layer-list"></div>
+    <div class="layer-controls">
+        <sl-switch id="terrain" size="small" checked>3D terrain</sl-switch>
+        <sl-switch id="swipe" size="small">Swipe</sl-switch>
+    </div>
+    <div id="swipe-choice" class="row swipe-choice" hidden>
+        <sl-select id="swipe-left" size="small" label="Left of the line" hoist></sl-select>
+        <sl-select id="swipe-right" size="small" label="Right of the line" hoist></sl-select>
+    </div>
+</section>
+
+<div id="hud" class="glass" aria-live="off"></div>
+
+<section id="inspector" class="glass" aria-label="Pixel inspector">
+    <h3><span>Pixel inspector</span><sl-icon-button id="inspector-close" name="x-lg" label="Close"></sl-icon-button></h3>
+    <div class="where" id="inspector-where"></div>
+    <div class="value" id="inspector-value"></div>
+    <div id="profile-wrap"><canvas id="profile"></canvas></div>
+    <table id="inspector-table"></table>
+</section>
+
+<section id="layer-info" class="glass" aria-label="Active layer">
+    <div class="info-head">
+        <div class="section-title">Active layer</div>
+        <sl-icon-button id="layer-info-toggle" name="chevron-down" label="Hide the description"></sl-icon-button>
+    </div>
+    <div class="info-scroll">
+        <div class="info-body" id="layer-info-body"></div>
+
+        <p id="style-note" class="hint" hidden></p>
+
+        <sl-tab-group id="tabs">
+            <sl-tab slot="nav" panel="style">Style</sl-tab>
+            <sl-tab slot="nav" panel="json">Style JSON</sl-tab>
+            <sl-tab slot="nav" panel="about">How it works</sl-tab>
+
+            <sl-tab-panel name="style">
+                <sl-select id="preset" label="Preset" hoist placeholder="Custom"></sl-select>
+                <p class="hint" id="preset-description"></p>
+
+                <div class="section-title">Render</div>
+                <sl-radio-group id="mode" value="rgb" size="small">
+                    <sl-radio-button value="rgb">RGB composite</sl-radio-button>
+                    <sl-radio-button value="pseudocolor">Single value</sl-radio-button>
+                </sl-radio-group>
+
+                <div id="rgb-controls">
+                    <div class="spacer"></div>
+                    <div class="grid3">
+                        <sl-select id="red" label="Red" size="small" hoist></sl-select>
+                        <sl-select id="green" label="Green" size="small" hoist></sl-select>
+                        <sl-select id="blue" label="Blue" size="small" hoist></sl-select>
+                    </div>
+                    <div class="spacer"></div>
+                    <sl-range id="saturation" label="Saturation" min="0" max="2" step="0.05" value="1"></sl-range>
+                </div>
+
+                <div id="single-controls" hidden>
+                    <div class="spacer"></div>
+                    <sl-input id="expression" label="Band or expression" size="small" spellcheck="false" autocomplete="off"
+                              clearable placeholder="(nir - red) / (nir + red)">
+                        <sl-icon-button slot="suffix" id="expression-apply" name="check-lg" label="Apply expression"></sl-icon-button>
+                    </sl-input>
+                    <div id="expression-status"></div>
+                    <div class="chips" id="band-chips"></div>
+                    <div class="spacer"></div>
+                    <sl-select id="colormap" label="Colour map" size="small" hoist></sl-select>
+                    <div class="ramp-tools">
+                        <div class="ramp-preview" id="ramp-preview"></div>
+                        <sl-tooltip content="Reverse"><sl-icon-button id="reverse" name="arrow-left-right" label="Reverse"></sl-icon-button></sl-tooltip>
+                        <sl-tooltip content="Smooth / stepped"><sl-icon-button id="blend" name="bar-chart-steps" label="Smooth or stepped"></sl-icon-button></sl-tooltip>
+                        <sl-tooltip content="Add stop"><sl-icon-button id="add-stop" name="plus-circle" label="Add stop"></sl-icon-button></sl-tooltip>
+                    </div>
+                    <div id="ramp-editor" class="ramp-editor"></div>
+                </div>
+
+                <div id="stretch-controls">
+                    <div class="section-title">Stretch</div>
+                    <sl-select id="stretch-type" size="small" hoist value="percentile">
+                        <sl-option value="percentile">Percent clip (cumulative cut)</sl-option>
+                        <sl-option value="stddev">Standard deviations</sl-option>
+                        <sl-option value="minmax">Min / max</sl-option>
+                        <sl-option value="fixed">Fixed range</sl-option>
+                    </sl-select>
+                    <div class="spacer"></div>
+                    <div class="row" id="stretch-params"></div>
+                    <div class="spacer"></div>
+                    <sl-range id="gamma" label="Gamma" min="0.3" max="3" step="0.05" value="1"></sl-range>
+                    <div class="spacer"></div>
+                    <div class="row">
+                        <sl-button id="stretch-view" size="small" variant="primary" outline><sl-icon slot="prefix" name="aspect-ratio"></sl-icon>Stretch to view</sl-button>
+                        <sl-button id="stretch-scene" size="small" outline><sl-icon slot="prefix" name="globe2"></sl-icon>Whole scene</sl-button>
+                    </div>
+                </div>
+
+                <div class="section-title">Mask</div>
+                <sl-switch id="mask" size="small">Hide clouds and shadows</sl-switch>
+                <p class="hint" id="mask-hint"></p>
+            </sl-tab-panel>
+
+            <sl-tab-panel name="json">
+                <p class="hint" style="margin-top:0">The whole look is one JSON-serialisable object, passed to <code>model.setStyle()</code>. Edit and apply.
+                    <sl-button id="save-manifest-open" size="small" variant="text">Save the current layer as a manifest…</sl-button></p>
+                <sl-textarea id="json-editor" rows="16" resize="auto" spellcheck="false" style="font-family: var(--sl-font-mono)"></sl-textarea>
+                <div class="row" style="margin-top:8px">
+                    <sl-button id="json-apply" size="small" variant="primary">Apply</sl-button>
+                    <sl-copy-button id="json-copy" style="flex:none"></sl-copy-button>
+                </div>
+                <div id="json-status"></div>
+            </sl-tab-panel>
+
+            <sl-tab-panel name="about">
+                <p class="hint" style="margin-top:0">
+                    Every tile is read with HTTP range requests from the original COGs (Sentinel-2 keeps each band in its own file, at 10, 20 or 60 m).
+                    The bands are resampled onto one tile grid, decoded values are cached, and the style is applied on the CPU with lookup tables:
+                    band math is compiled into a tight loop (no <code>eval</code> of user text: a whitelisted grammar), stretches come from
+                    histograms of an overview, colours from 1024-entry LUTs. LuciadRIA then drapes the RGBA tiles on the 3D globe.
+                </p>
+                <p class="hint">Changing style never fetches data again: watch the cache hits in the top-right panel.</p>
+            </sl-tab-panel>
+        </sl-tab-group>
+    </div>
+</section>
+</div>
+
+
+<div id="timebar" class="glass">
+    <sl-icon-button id="play" name="play-fill" label="Play" style="font-size: 22px"></sl-icon-button>
+    <div class="month" id="month-label">Jan</div>
+    <sl-range id="month" min="0" max="11" step="1" value="0"></sl-range>
+</div>
+
+<div id="loading" class="glass"><sl-spinner></sl-spinner><span id="loading-text">Loading…</span></div>
+<div class="credits" id="credits"></div>
+
+<script type="module" src="./src/bootstrap.ts" data-app="studio"></script>
+</body>
+</html>

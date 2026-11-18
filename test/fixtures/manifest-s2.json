@@ -1,0 +1,25 @@
+{
+  "type": "ria-geotiff/stack",
+  "version": 1,
+  "title": "Red and NIR sample",
+  "inputs": [
+    {
+      "url": "s2-red-10m.tif",
+      "bands": "red"
+    },
+    {
+      "url": "s2-nir-10m.tif",
+      "bands": "nir"
+    }
+  ],
+  "style": {
+    "render": {
+      "type": "pseudocolor",
+      "expression": "(nir - red) / (nir + red)",
+      "stretch": [
+        -0.2,
+        0.9
+      ]
+    }
+  }
+}

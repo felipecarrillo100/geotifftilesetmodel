@@ -66,12 +66,9 @@ export async function gdalScaleOffset(image: GeoTIFFImage, band = 0): Promise<{ 
     return {scale: Number.isFinite(scale) && scale !== 0 ? scale : 1, offset: Number.isFinite(offset) ? offset : 0};
 }
 
-/**
- * `STATISTICS_MINIMUM` / `STATISTICS_MAXIMUM` written by GDAL (for example by `gdalinfo -stats`), if present.
- */
-export async function gdalStatisticsRange(image: GeoTIFFImage, band = 0): Promise<{ min: number; max: number } | null> {
+/** GDAL band description (`gdal_edit.py -bandmeta` / `SetDescription`), if present. */
+export async function gdalBandDescription(image: GeoTIFFImage, band = 0): Promise<string | null> {
     const metadata = await gdalMetadata(image, band);
-    const min = Number(metadata.STATISTICS_MINIMUM);
-    const max = Number(metadata.STATISTICS_MAXIMUM);
-    return Number.isFinite(min) && Number.isFinite(max) && max > min ? {min, max} : null;
+    const description = metadata.DESCRIPTION;
+    return typeof description === "string" && description.trim() ? description.trim() : null;
 }

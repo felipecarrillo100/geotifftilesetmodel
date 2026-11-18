@@ -88,7 +88,8 @@ describe("LuciadElev0 PNG encoding", () => {
 
 describe("GeoTiffTileSetModel elevation", () => {
     it("exposes a LuciadFusion-like quadtree of 64 x 64 point samples", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        const model = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -102,7 +103,8 @@ describe("GeoTiffTileSetModel elevation", () => {
     });
 
     it("returns LuciadElev0 PNG heights that match the source surface at every sample", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        const model = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -127,7 +129,8 @@ describe("GeoTiffTileSetModel elevation", () => {
     });
 
     it("gives neighbouring tiles identical heights on their shared edge (no seams)", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        const model = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -140,7 +143,8 @@ describe("GeoTiffTileSetModel elevation", () => {
     });
 
     it("delivers nodata as the LuciadElev0 nodata marker, or as elevation.noDataHeight when set", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        const model = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             elevation: {noDataHeight: -500},
             pool: null,
@@ -156,7 +160,8 @@ describe("GeoTiffTileSetModel elevation", () => {
         expect(Math.abs(heights[j * 64 + i] + 500)).toBeLessThanOrEqual(QUANTISATION);
         expect(Array.from(heights).every((h) => h > -9000)).toBe(true); // the raw -9999 never leaks through
 
-        const byDefault = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        const byDefault = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -166,14 +171,16 @@ describe("GeoTiffTileSetModel elevation", () => {
     });
 
     it("rejects a NaN noDataHeight (LuciadRIA discards tiles containing NaN)", async () => {
-        await expect(GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-3857-float32.tif"), {
+        await expect(GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-3857-float32.tif"),
             dataType: RasterDataType.ELEVATION,
             elevation: {noDataHeight: NaN},
         })).rejects.toBeInstanceOf(RangeError);
     });
 
     it("converts Int16 with GDAL scale/offset and honours PixelIsPoint", async () => {
-        const model = await GeoTiffTileSetModel.createFromGeoTIFF(await openFixture("elevation-4326-int16-scaled.tif"), {
+        const model = await GeoTiffTileSetModel.create({
+            file: await openFixture("elevation-4326-int16-scaled.tif"),
             dataType: RasterDataType.ELEVATION,
             pool: null,
         });
@@ -191,11 +198,23 @@ describe("GeoTiffTileSetModel elevation", () => {
         }
     });
 
-    it("refuses RGB imagery as elevation with INVALIDELEVATION", async () => {
+    it("refuses colour imagery as elevation with INVALIDELEVATION, and bands it does not have", async () => {
+        // The RGB fixture presented as YCbCr (as JPEG orthophotos are): its bands are colours, not values.
         const tiff = await openFixture("rgb-3857-uint8.tif");
-        await expect(GeoTiffTileSetModel.createFromGeoTIFF(tiff, {dataType: RasterDataType.ELEVATION, elevation: {band: 5}}))
+        const getImage = tiff.getImage.bind(tiff);
+        tiff.getImage = async (index?: number) => {
+            const image = await getImage(index);
+            const fd = image.fileDirectory as unknown as { getValue: (name: string) => unknown };
+            const getValue = fd.getValue.bind(fd);
+            fd.getValue = (name: string) => (name === "PhotometricInterpretation" ? 6 : getValue(name));
+            return image;
+        };
+        const options = {file: tiff, dataType: RasterDataType.ELEVATION, elevation: {height: "b1"}, pool: null};
+        await expect(GeoTiffTileSetModel.create(options))
             .rejects.toMatchObject({name: "GeoTiffModelError", cause: "INVALIDELEVATION"});
-        await expect(GeoTiffTileSetModel.createFromGeoTIFF(tiff, {dataType: RasterDataType.ELEVATION, elevation: {band: 5}}))
-            .rejects.toBeInstanceOf(GeoTiffModelError);
+        await expect(GeoTiffTileSetModel.create(options)).rejects.toBeInstanceOf(GeoTiffModelError);
+        await expect(GeoTiffTileSetModel.create({
+            file: await openFixture("rgb-3857-uint8.tif"), dataType: RasterDataType.ELEVATION, elevation: {height: "b6"}, pool: null,
+        })).rejects.toMatchObject({name: "StyleError", path: "elevation.height"});
     });
 });

@@ -5,10 +5,11 @@ import {setLicenseText} from "@luciad/ria/util/License.js";
 const response = await fetch("./license.txt");
 const text = response.ok ? await response.text() : "";
 if (!text || text.trimStart().startsWith("<")) {
-    document.getElementById("log")!.innerHTML =
+    (document.getElementById("log") ?? document.body).insertAdjacentHTML("afterbegin",
         '<span class="error">No LuciadRIA license: copy your development license to demo/public/license.txt ' +
-        "(see demo/README.md) and reload.</span>";
+        "(see demo/README.md) and reload.</span>");
 } else {
     setLicenseText(text);
-    await import("./main.js");
+    if (document.querySelector("script[data-app=studio]")) await import("./studio/studio.js");
+    else await import("./main.js");
 }

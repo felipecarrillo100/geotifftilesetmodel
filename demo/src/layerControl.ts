@@ -3,6 +3,7 @@ import type {LayerTreeNode} from "@luciad/ria/view/LayerTreeNode.js";
 import type {Bounds} from "@luciad/ria/shape/Bounds.js";
 import type {Handle} from "@luciad/ria/util/Evented.js";
 import {RasterDataType} from "@luciad/ria/model/tileset/RasterDataType.js";
+import {GeoTiffTileSetModel} from "ria-geotiff";
 
 /**
  * Bounds of a layer's data: its model's bounds when the model has any (raster tile set models do); for a layer group,
@@ -24,7 +25,7 @@ export function layerBounds(node: LayerTreeNode): Bounds | null {
 /** Whether a layer (or any layer of a group) is an elevation layer. */
 export function isElevation(node: LayerTreeNode): boolean {
     const model = (node as { model?: { dataType?: RasterDataType } }).model;
-    if (model) return model.dataType === RasterDataType.ELEVATION;
+    if (model) return model instanceof GeoTiffTileSetModel ? model.isElevation : model.dataType === RasterDataType.ELEVATION;
     return node.children.some(isElevation);
 }
 

@@ -2,7 +2,7 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "noEmit": true, "rootDir": "..", "types": ["vite/client", "node"],
-    "paths": {"ria-geotiff": ["../src/index.ts"]},
+    "paths": {"ria-geotiff": ["../src/index.ts"], "ria-geotiff/ramps": ["../src/rs/ramps.ts"], "ria-geotiff/presets": ["../src/rs/presets.ts"], "ria-geotiff/stac": ["../src/stac/index.ts"]},
     "module": "ESNext", "target": "ES2022"
   },
   "include": ["src", "vite.config.ts", "../src"]

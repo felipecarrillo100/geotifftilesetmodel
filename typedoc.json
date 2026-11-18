@@ -1,0 +1,75 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "src/index.ts",
+    "src/stac/index.ts",
+    "src/rs/ramps.ts",
+    "src/rs/presets.ts"
+  ],
+  "out": "build/docs",
+  "tsconfig": "tsconfig.json",
+  "name": "ria-geotiff",
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "externalPattern": [
+    "**/node_modules/**"
+  ],
+  "sort": [
+    "kind",
+    "alphabetical"
+  ],
+  "validation": {
+    "notExported": false,
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "requiredToBeDocumented": [
+    "Class",
+    "Function",
+    "Method",
+    "Interface",
+    "TypeAlias",
+    "Enum",
+    "Variable",
+    "Property",
+    "Accessor",
+    "Constructor"
+  ],
+  "projectDocuments": [
+    "docs/developer-guide.md",
+    "docs/manifest.md"
+  ],
+  "categorizeByGroup": false,
+  "defaultCategory": "Other",
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": false,
+    "includeFolders": false
+  },
+  "searchInComments": true,
+  "searchInDocuments": true,
+  "hideGenerator": true,
+  "disableSources": true,
+  "categoryOrder": [
+    "Model",
+    "Sources",
+    "Manifests",
+    "Styles",
+    "Expressions",
+    "Colour maps",
+    "Statistics",
+    "Ramps",
+    "Presets",
+    "Client",
+    "Choosing data",
+    "Search",
+    "Selection helpers",
+    "Assets and bands",
+    "STAC JSON",
+    "Protected data",
+    "Errors",
+    "*"
+  ]
+}

@@ -11,3 +11,7 @@ demo/public/data/
 .claude/
 CLAUDE.md
 CLAUDE.local.md
+# Demo build output: contains a copy of the LuciadRIA license and local data, never commit it
+demo/dist/
+# Generated API reference pages (inserted into docs/developer-guide.md)
+build/

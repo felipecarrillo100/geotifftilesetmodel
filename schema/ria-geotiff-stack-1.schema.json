@@ -1,0 +1,440 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/ria-geotiff/schema/ria-geotiff-stack-1.schema.json",
+  "title": "ria-geotiff manifest, version 1",
+  "description": "The options of GeoTiffTileSetModel.create() as a JSON file: GeoTIFF inputs (or STAC items or a STAC selection), band names, data type and styles. Request headers and parameters (secrets) are never part of a manifest. See docs/manifest.md.",
+  "type": "object",
+  "required": [
+    "type",
+    "version"
+  ],
+  "oneOf": [
+    {
+      "required": [
+        "inputs"
+      ]
+    },
+    {
+      "required": [
+        "stac"
+      ]
+    }
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "type": {
+      "const": "ria-geotiff/stack",
+      "description": "Identifies the format."
+    },
+    "version": {
+      "const": 1,
+      "description": "Format version."
+    },
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "attribution": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/input"
+      }
+    },
+    "stac": {
+      "$ref": "#/$defs/stac"
+    },
+    "bands": {
+      "type": "object",
+      "description": "Band names by location: {\"red\": \"f1_b3\"} is band 3 of the first input; with one input \"b3\" is enough. Only these bands exist in the model.",
+      "propertyNames": {
+        "$ref": "#/$defs/bandName"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(f[0-9]+_)?b[0-9]+$"
+      }
+    },
+    "style": {
+      "$ref": "#/$defs/style"
+    },
+    "styles": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/style"
+      }
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The model reference as a LuciadRIA identifier (\"EPSG:32633\", \"CRS:1\" for pixel coordinates), instead of the files' own reference."
+    },
+    "tileSize": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 4096,
+      "description": "Imagery tile width and height in pixels."
+    },
+    "cacheSize": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "MiB of decoded band tiles."
+    },
+    "byteCacheSize": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "MiB of fetched (compressed) bytes kept per input."
+    },
+    "statisticsSize": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "decodedBlocks": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "credentials": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "enum": [
+            "omit",
+            "same-origin",
+            "include"
+          ]
+        }
+      ],
+      "description": "Cookies and HTTP authentication: true = include, false = same-origin, or a fetch mode."
+    },
+    "dataType": {
+      "enum": [
+        "image",
+        "elevation"
+      ],
+      "description": "image (default) or elevation (terrain)."
+    },
+    "elevation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "type": "string",
+          "description": "A band name or an expression over the bands; required with several bands."
+        },
+        "tileSize": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "noDataHeight": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "bandName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "input": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "URL of a (Cloud Optimized) GeoTIFF, absolute or relative to the manifest."
+        },
+        "bands": {
+          "description": "Band names: one name, or a list in file order (null skips a band).",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bandName"
+            },
+            {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/bandName"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "scale": {
+          "type": "number"
+        },
+        "offset": {
+          "type": "number"
+        },
+        "nodata": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "const": "nan"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resampling": {
+          "enum": [
+            "nearest",
+            "bilinear"
+          ]
+        },
+        "sign": {
+          "enum": [
+            "planetary-computer"
+          ],
+          "description": "Sign the URL with a Planetary Computer SAS token."
+        },
+        "crsName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Coordinate reference identifier (\"EPSG:2056\") used when the file declares no EPSG reference, as STAC sources take from proj:code or proj:epsg."
+        }
+      }
+    },
+    "stac": {
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "items"
+          ]
+        },
+        {
+          "required": [
+            "catalog",
+            "collection"
+          ]
+        }
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "URLs of STAC items, absolute or relative to the manifest."
+        },
+        "per": {
+          "$ref": "#/$defs/period"
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "naming": {
+          "enum": [
+            "common-name",
+            "asset-key"
+          ]
+        },
+        "bandNames": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        "resampling": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "nearest",
+              "bilinear"
+            ]
+          }
+        },
+        "catalog": {
+          "type": "string",
+          "description": "URL of a STAC API."
+        },
+        "collection": {
+          "type": "string"
+        },
+        "area": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 4,
+              "maxItems": 4
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "coordinates"
+              ],
+              "properties": {
+                "type": {
+                  "enum": [
+                    "Polygon",
+                    "MultiPolygon"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "datetime": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ]
+        },
+        "where": {
+          "type": "object"
+        },
+        "maxCloud": {
+          "type": "number"
+        },
+        "bands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "pick": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "coverage": {
+              "enum": [
+                "full",
+                "best"
+              ]
+            },
+            "rank": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "least-cloud",
+                    "newest",
+                    "oldest"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "closestTo"
+                  ],
+                  "properties": {
+                    "closestTo": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            },
+            "per": {
+              "$ref": "#/$defs/period"
+            },
+            "months": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              }
+            }
+          }
+        }
+      }
+    },
+    "style": {
+      "type": "object",
+      "required": [
+        "render"
+      ],
+      "description": "A BandStyle: render (rgb or pseudocolor) and optional mask rules. Validated in full when the manifest is opened.",
+      "properties": {
+        "render": {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "rgb",
+                "pseudocolor"
+              ]
+            }
+          }
+        },
+        "mask": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "period": {
+      "enum": [
+        "day",
+        "solar-day",
+        "week",
+        "month",
+        "quarter",
+        "year"
+      ]
+    }
+  }
+}
